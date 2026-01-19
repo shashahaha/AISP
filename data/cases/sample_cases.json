@@ -1,0 +1,117 @@
+{
+  "cases": [
+    {
+      "case_id": "case_001",
+      "title": "胸痛待查",
+      "description": "58岁男性建筑工人，突发胸痛3小时",
+      "difficulty": "medium",
+      "category": "内科",
+      "patient_info": {
+        "age": 58,
+        "gender": "男",
+        "occupation": "建筑工人",
+        "education": "初中",
+        "personality": "内向、焦虑、表达简单",
+        "speech_style": "简单直接，略显紧张"
+      },
+      "chief_complaint": {
+        "text": "胸痛3小时"
+      },
+      "symptoms": {
+        "onset": "3小时前劳动时突然出现",
+        "location": "胸骨后",
+        "nature": "压榨性疼痛",
+        "severity": "7/10分",
+        "duration": "持续5-10分钟",
+        "radiation": "向左肩放射",
+        "aggravating_factors": ["体力劳动", "情绪激动", "寒冷刺激"],
+        "relieving_factors": ["休息", "含服硝酸甘油"],
+        "associated_symptoms": ["轻度气短", "出汗"]
+      },
+      "standard_diagnosis": "不稳定性心绞痛",
+      "differential_diagnosis": ["急性心肌梗死", "主动脉夹层", "肺栓塞"],
+      "key_questions": [
+        "疼痛的性质和部位",
+        "疼痛的诱发和缓解因素",
+        "既往心脏病史",
+        "高血压病史",
+        "吸烟饮酒史"
+      ]
+    },
+    {
+      "case_id": "case_002",
+      "title": "急性胃炎",
+      "description": "25岁女性白领，上腹痛伴恶心呕吐1天",
+      "difficulty": "easy",
+      "category": "消化内科",
+      "patient_info": {
+        "age": 25,
+        "gender": "女",
+        "occupation": "公司白领",
+        "education": "本科",
+        "personality": "年轻、表达清晰、略显紧张",
+        "speech_style": "表达清晰，逻辑性强"
+      },
+      "chief_complaint": {
+        "text": "上腹痛伴恶心呕吐1天"
+      },
+      "symptoms": {
+        "onset": "1天前",
+        "location": "上腹部",
+        "nature": "烧灼样疼痛",
+        "severity": "5/10分",
+        "duration": "阵发性加重",
+        "radiation": null,
+        "aggravating_factors": ["进食后", "辛辣食物"],
+        "relieving_factors": ["禁食", "休息"],
+        "associated_symptoms": ["恶心", "呕吐胃内容物", "食欲不振"]
+      },
+      "standard_diagnosis": "急性胃炎",
+      "differential_diagnosis": ["胃溃疡", "急性胆囊炎", "急性胰腺炎"],
+      "key_questions": [
+        "饮食史",
+        "呕吐物性质",
+        "腹痛与进食关系",
+        "既往胃病史"
+      ]
+    },
+    {
+      "case_id": "case_003",
+      "title": "社区获得性肺炎",
+      "description": "65岁退休教师，咳嗽咳痰3天，发热1天",
+      "difficulty": "medium",
+      "category": "呼吸内科",
+      "patient_info": {
+        "age": 65,
+        "gender": "男",
+        "occupation": "退休教师",
+        "education": "大专",
+        "personality": "稳重、配合、表达清晰",
+        "speech_style": "表达清晰，描述详细"
+      },
+      "chief_complaint": {
+        "text": "咳嗽咳痰3天，发热1天"
+      },
+      "symptoms": {
+        "onset": "3天前受凉后",
+        "location": "胸部",
+        "nature": "咳嗽伴胸痛",
+        "severity": "6/10分",
+        "duration": "持续3天",
+        "radiation": null,
+        "aggravating_factors": ["深呼吸", "咳嗽时"],
+        "relieving_factors": ["休息"],
+        "associated_symptoms": ["咳黄痰", "发热", "乏力", "食欲下降"]
+      },
+      "standard_diagnosis": "社区获得性肺炎",
+      "differential_diagnosis": ["急性支气管炎", "肺结核", "肺癌"],
+      "key_questions": [
+        "痰液性质",
+        "体温变化",
+        "呼吸困难情况",
+        "既往肺部病史",
+        "接触史"
+      ]
+    }
+  ]
+}
