@@ -66,3 +66,14 @@ AISP系统产品需求文档.md
 
 # Claude temp files
 .claude/
+
+# 前端必忽略的文件
+node_modules/
+dist/
+build/
+.env
+.env.local
+.DS_Store
+npm-debug.log
+
+
