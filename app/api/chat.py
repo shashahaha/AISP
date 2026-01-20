@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import Dict, Any
+from typing import Dict, Any, List
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.models.schemas import ChatRequest, ChatResponse, DiagnosisSubmit, DiagnosisFeedback
 from app.core.chat_engine import get_chat_engine
 from app.services.session_service import SessionService
+from app.services.scoring_service import ScoringService
 from app.db.session import get_async_db
+from app.models.database import Case, SessionStatus, ImprovementSuggestion
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 
@@ -22,7 +25,7 @@ async def start_chat_session(
     - **message**: 第一条消息（可选，预留字段）
     """
     # 获取病例数据
-    case_data = await _get_case_data(request.case_id)
+    case_data = await _get_case_data(db, request.case_id)
 
     # 获取用户ID (临时硬编码，应从JWT token获取)
     user_id = 1
@@ -104,7 +107,7 @@ async def send_message(
     )
 
     # 获取病例数据
-    case_data = await _get_case_data(session.case_id)
+    case_data = await _get_case_data(db, session.case.case_id)
 
     # 获取对话历史
     conversation_history = await session_service.get_conversation_history(request.session_id)
@@ -145,6 +148,7 @@ async def end_session(
     - **reasoning**: 诊断推理过程（可选）
     """
     session_service = SessionService(db)
+    scoring_service = ScoringService(db)
 
     # 获取会话
     session = await session_service.get_session_by_id(submit.session_id)
@@ -161,48 +165,113 @@ async def end_session(
     )
 
     # 获取病例数据
-    case_data = await _get_case_data(session.case_id)
+    case_data = await _get_case_data(db, session.case.case_id)
 
     # 获取对话历史
     conversation_history = await session_service.get_conversation_history(submit.session_id)
 
-    # 调用对话引擎生成反馈
-    engine = get_chat_engine()
-    feedback = await engine.end_session(
-        session_id=submit.session_id,
+    # 使用新的评分引擎进行评分
+    from app.models.database import ChatSession
+
+    # 获取会话的数据库ID
+    session_result = await db.execute(
+        select(ChatSession).where(ChatSession.session_id == submit.session_id)
+    )
+    session_db = session_result.scalar_one()
+
+    # 使用评分服务进行完整评分并保存
+    session_score = await scoring_service.score_session(
+        session_id=session_db.id,
         conversation_history=conversation_history,
+        student_diagnosis=submit.diagnosis,
         case_data=case_data
     )
 
-    # 检查诊断是否正确
-    diagnosis_correct = _check_diagnosis(
-        submit.diagnosis,
-        case_data.get("standard_diagnosis", "")
+    # 创建学习记录
+    await scoring_service.create_learning_record(
+        user_id=session.user_id,
+        session_id=session_db.id,
+        case_id=session.case.id,
+        score=session_score.final_score,
+        time_spent=0,  # 可以后续计算
+        knowledge_tested=[],
+        knowledge_mastered=[] if not session_score.passed else [case_data.get("category")],
+        knowledge_weak=[case_data.get("category")] if not session_score.passed else []
     )
 
-    # 计算评分
-    scores = _calculate_scores(feedback, diagnosis_correct)
+    # 更新知识点掌握度
+    await scoring_service.update_knowledge_mastery(
+        user_id=session.user_id,
+        case_data=case_data,
+        score=session_score.final_score,
+        passed=session_score.passed
+    )
 
-    # 保存评分
+    # 更新chat_sessions表的评分（快速查询用）
     await session_service.save_scores(
         session_id=submit.session_id,
-        **scores
+        inquiry_score=session_score.inquiry_total_score,
+        diagnosis_score=session_score.diagnosis_total_score,
+        communication_score=session_score.communication_total_score,
+        total_score=session_score.final_score
     )
 
     # 更新会话状态为完成
     await session_service.update_session_status(
         session_id=submit.session_id,
-        status="completed"
+        status=SessionStatus.COMPLETED
     )
 
     await db.commit()
 
-    # 添加诊断信息到反馈
-    feedback["student_diagnosis"] = submit.diagnosis
-    feedback["diagnosis_correct"] = diagnosis_correct
-    feedback["scores"] = scores
+    # 获取改进建议
+    suggestions_result = await db.execute(
+        select(ImprovementSuggestion)
+        .where(ImprovementSuggestion.session_score_id == session_score.id)
+    )
+    suggestions = suggestions_result.scalars().all()
 
-    return feedback
+    # 构建返回数据
+    return {
+        "session_id": submit.session_id,
+        "completed_at": session_score.created_at.isoformat() if session_score.created_at else None,
+        "scores": {
+            "inquiry": {
+                "total": session_score.inquiry_total_score,
+                "symptom_inquiry": session_score.symptom_inquiry_score,
+                "inquiry_logic": session_score.inquiry_logic_score,
+                "medical_etiquette": session_score.medical_etiquette_score,
+                "coverage_rate": session_score.key_question_coverage_rate,
+                "covered": session_score.covered_questions,
+                "missed": session_score.missed_questions
+            },
+            "diagnosis": {
+                "total": session_score.diagnosis_total_score,
+                "accuracy": session_score.diagnosis_accuracy,
+                "differential_count": session_score.differential_considered,
+                "reasoning": session_score.diagnosis_reasoning_score
+            },
+            "communication": {
+                "total": session_score.communication_total_score,
+                "turn_count": session_score.turn_count,
+                "polite_rate": session_score.polite_expression_rate,
+                "empathy": session_score.empathy_score
+            },
+            "total": session_score.final_score
+        },
+        "grade": session_score.grade,
+        "passed": session_score.passed,
+        "ai_comments": session_score.ai_comments,
+        "suggestions": [
+            {
+                "type": s.suggestion_type,
+                "priority": s.priority,
+                "title": s.title,
+                "description": s.description
+            }
+            for s in suggestions
+        ]
+    }
 
 
 @router.get("/session/{session_id}", response_model=Dict[str, Any])
@@ -288,93 +357,40 @@ async def list_sessions(
     ]
 
 
-async def _get_case_data(case_id: str) -> Dict[str, Any]:
-    """获取病例数据（临时实现，后续从数据库获取）"""
-    cases = {
-        "case_001": {
-            "case_id": "case_001",
-            "title": "胸痛待查",
-            "description": "58岁男性建筑工人，突发胸痛3小时",
+async def _get_case_data(db: AsyncSession, case_id: str) -> Dict[str, Any]:
+    """从数据库获取病例数据"""
+    result = await db.execute(
+        select(Case).where(Case.case_id == case_id)
+    )
+    case = result.scalar_one_or_none()
+
+    if not case:
+        # 如果数据库中没有，返回默认病例（兜底）
+        return {
+            "case_id": case_id,
+            "title": "默认病例",
+            "description": "病例未找到",
             "difficulty": "medium",
             "category": "内科",
-            "patient_info": {
-                "age": 58,
-                "gender": "男",
-                "occupation": "建筑工人",
-                "education": "初中",
-                "personality": "内向、焦虑、表达简单",
-                "speech_style": "简单直接，略显紧张"
-            },
-            "chief_complaint": {
-                "text": "胸痛3小时"
-            },
-            "symptoms": {
-                "onset": "3小时前劳动时突然出现",
-                "location": "胸骨后",
-                "nature": "压榨性疼痛",
-                "severity": "7/10分",
-                "duration": "持续5-10分钟",
-                "radiation": "向左肩放射",
-                "aggravating_factors": ["体力劳动", "情绪激动", "寒冷刺激"],
-                "relieving_factors": ["休息", "含服硝酸甘油"],
-                "associated_symptoms": ["轻度气短", "出汗"]
-            },
-            "standard_diagnosis": "不稳定性心绞痛",
-            "differential_diagnosis": ["急性心肌梗死", "主动脉夹层", "肺栓塞"],
-            "key_questions": [
-                "疼痛的性质和部位",
-                "疼痛的诱发和缓解因素",
-                "既往心脏病史",
-                "高血压病史",
-                "吸烟饮酒史"
-            ]
+            "patient_info": {},
+            "chief_complaint": {"text": "我不舒服"},
+            "symptoms": {},
+            "standard_diagnosis": "待诊断",
+            "differential_diagnosis": [],
+            "key_questions": []
         }
-    }
 
-    return cases.get(case_id, cases["case_001"])
-
-
-def _check_diagnosis(student_diagnosis: str, correct_diagnosis: str) -> bool:
-    """检查诊断是否正确"""
-    return correct_diagnosis.lower() in student_diagnosis.lower()
-
-
-def _calculate_scores(
-    feedback: Dict[str, Any],
-    diagnosis_correct: bool
-) -> Dict[str, float]:
-    """
-    计算综合评分
-
-    Args:
-        feedback: 反馈数据
-        diagnosis_correct: 诊断是否正确
-
-    Returns:
-        评分字典 {inquiry_score, diagnosis_score, communication_score, total_score}
-    """
-    # 问诊评分 (40%)
-    coverage_rate = feedback.get("completeness", {}).get("coverage_rate", 0)
-    inquiry_score = coverage_rate * 40
-
-    # 诊断评分 (35%)
-    diagnosis_score = 35 if diagnosis_correct else 0
-
-    # 沟通评分 (25%) - 基于问诊轮次和礼貌性
-    turn_count = feedback.get("turn_count", 0)
-    if turn_count >= 10:
-        communication_score = 25
-    elif turn_count >= 5:
-        communication_score = 20
-    else:
-        communication_score = 15
-
-    # 总分
-    total_score = inquiry_score + diagnosis_score + communication_score
-
+    # 返回病例数据（合并所有字段）
     return {
-        "inquiry_score": round(inquiry_score, 2),
-        "diagnosis_score": round(diagnosis_score, 2),
-        "communication_score": round(communication_score, 2),
-        "total_score": round(total_score, 2)
+        "case_id": case.case_id,
+        "title": case.title,
+        "description": case.description,
+        "difficulty": case.difficulty,
+        "category": case.category,
+        "patient_info": case.patient_info or {},
+        "chief_complaint": case.chief_complaint or {},
+        "symptoms": case.symptoms or {},
+        "standard_diagnosis": case.standard_diagnosis,
+        "differential_diagnosis": case.differential_diagnosis or [],
+        "key_questions": case.key_questions or []
     }
