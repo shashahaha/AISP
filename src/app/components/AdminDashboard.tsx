@@ -55,6 +55,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
   // 病例管理相关
   const [showCaseDialog, setShowCaseDialog] = useState(false);
+  const [editingCase, setEditingCase] = useState<CaseItem | null>(null);
   const [caseName, setCaseName] = useState('');
   const [caseDepartment, setCaseDepartment] = useState('');
   const [caseDisease, setCaseDisease] = useState('');
@@ -77,6 +78,16 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [diagnosisWeight, setDiagnosisWeight] = useState(40);
   const [treatmentWeight, setTreatmentWeight] = useState(30);
 
+  // 知识库数据源管理相关
+  const [showSourceDialog, setShowSourceDialog] = useState(false);
+  const [editingSource, setEditingSource] = useState<KnowledgeSource | null>(null);
+  const [sourceName, setSourceName] = useState('');
+  const [sourceType, setSourceType] = useState<'internal' | 'external'>('internal');
+  const [sourceCategory, setSourceCategory] = useState('');
+  const [sourceDescription, setSourceDescription] = useState('');
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [sourceStatus, setSourceStatus] = useState<'active' | 'inactive'>('active');
+
   const handleCreateUser = () => {
     if (!userName || !userUsername || !userPassword || !userEmail) return;
 
@@ -94,6 +105,39 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
 
     setUsers([...users, newUser]);
     resetUserForm();
+  };
+
+  const handleUpdateUser = () => {
+    if (!editingUser || !userName || !userUsername || !userPassword || !userEmail) return;
+
+    const updatedUsers = users.map(u => {
+      if (u.id === editingUser.id) {
+        return {
+          ...u,
+          name: userName,
+          username: userUsername,
+          password: userPassword,
+          email: userEmail,
+          role: userRole,
+          department: userDepartment,
+        };
+      }
+      return u;
+    });
+
+    setUsers(updatedUsers);
+    resetUserForm();
+  };
+
+  const handleEditUser = (user: User) => {
+    setEditingUser(user);
+    setUserName(user.name);
+    setUserUsername(user.username);
+    setUserPassword(user.password);
+    setUserEmail(user.email);
+    setUserRole(user.role);
+    setUserDepartment(user.department || '');
+    setShowUserDialog(true);
   };
 
   const handleDeleteUser = (userId: string) => {
@@ -143,6 +187,62 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     resetCaseForm();
   };
 
+  const handleUpdateCase = () => {
+    if (!editingCase || !caseName || !caseDepartment || !caseDisease || !aispName) return;
+
+    const updatedCases = cases.map(c => {
+      if (c.id === editingCase.id) {
+        return {
+          ...c,
+          name: caseName,
+          department: caseDepartment,
+          disease: caseDisease,
+          population: casePopulation,
+          difficulty: caseDifficulty,
+          description: caseDescription,
+          symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+          diagnosis: caseDiagnosis,
+          treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
+          aisp: {
+            ...c.aisp,
+            avatar: aispAvatar,
+            name: aispName,
+            age: parseInt(aispAge) || 30,
+            gender: aispGender,
+            personality: aispPersonality,
+            digitalHumanUrl: aispDigitalHumanUrl || undefined,
+            voiceProfile: aispVoiceProfile || undefined,
+          },
+        };
+      }
+      return c;
+    });
+
+    setCases(updatedCases);
+    resetCaseForm();
+  };
+
+  const handleEditCase = (caseItem: CaseItem) => {
+    setEditingCase(caseItem);
+    setCaseName(caseItem.name);
+    setCaseDepartment(caseItem.department);
+    setCaseDisease(caseItem.disease);
+    setCasePopulation(caseItem.population);
+    setCaseDifficulty(caseItem.difficulty);
+    setCaseDescription(caseItem.description);
+    setCaseSymptoms(caseItem.symptoms.join(', '));
+    setCaseDiagnosis(caseItem.diagnosis);
+    setCaseTreatment(caseItem.treatment.join(', '));
+    setAispName(caseItem.aisp.name);
+    setAispAge(caseItem.aisp.age.toString());
+    setAispGender(caseItem.aisp.gender);
+    setAispPersonality(caseItem.aisp.personality);
+    setAispAvatar(caseItem.aisp.avatar);
+    setAispDigitalHumanUrl(caseItem.aisp.digitalHumanUrl || '');
+    setAispVoiceProfile(caseItem.aisp.voiceProfile || 'standard');
+    setShowCaseDialog(true);
+  };
+
   const handleDeleteCase = (caseId: string) => {
     setCases(cases.filter(c => c.id !== caseId));
   };
@@ -175,6 +275,69 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
       treatmentWeight: treatmentWeight / 100,
     };
     setCriteria([updatedCriteria]);
+  };
+
+  const handleCreateSource = () => {
+    if (!sourceName || !sourceCategory) return;
+
+    const newSource: KnowledgeSource = {
+      id: `source${knowledgeSources.length + 1}`,
+      name: sourceName,
+      type: sourceType,
+      category: sourceCategory,
+      description: sourceDescription,
+      caseCount: 0,
+      status: sourceStatus,
+      url: sourceUrl || undefined,
+      lastSync: sourceType === 'external' ? new Date() : undefined,
+    };
+
+    setKnowledgeSources([...knowledgeSources, newSource]);
+    resetSourceForm();
+  };
+
+  const handleUpdateSource = () => {
+    if (!editingSource || !sourceName || !sourceCategory) return;
+
+    const updatedSources = knowledgeSources.map(s => {
+      if (s.id === editingSource.id) {
+        return {
+          ...s,
+          name: sourceName,
+          type: sourceType,
+          category: sourceCategory,
+          description: sourceDescription,
+          status: sourceStatus,
+          url: sourceUrl || undefined,
+        };
+      }
+      return s;
+    });
+
+    setKnowledgeSources(updatedSources);
+    resetSourceForm();
+  };
+
+  const handleEditSource = (source: KnowledgeSource) => {
+    setEditingSource(source);
+    setSourceName(source.name);
+    setSourceType(source.type);
+    setSourceCategory(source.category);
+    setSourceDescription(source.description);
+    setSourceUrl(source.url || '');
+    setSourceStatus(source.status);
+    setShowSourceDialog(true);
+  };
+
+  const resetSourceForm = () => {
+    setShowSourceDialog(false);
+    setEditingSource(null);
+    setSourceName('');
+    setSourceType('internal');
+    setSourceCategory('');
+    setSourceDescription('');
+    setSourceUrl('');
+    setSourceStatus('active');
   };
 
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
@@ -228,16 +391,23 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                 <p className="text-gray-500">管理系统用户和权限</p>
               </div>
               <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    ��加用户
-                  </Button>
-                </DialogTrigger>
+                <Button onClick={() => {
+                  setEditingUser(null);
+                  setUserName('');
+                  setUserUsername('');
+                  setUserPassword('');
+                  setUserEmail('');
+                  setUserRole('student');
+                  setUserDepartment('');
+                  setShowUserDialog(true);
+                }}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  添加用户
+                </Button>
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
-                    <DialogTitle>添加新用户</DialogTitle>
-                    <DialogDescription>创建新的系统用户并分配角色权限</DialogDescription>
+                    <DialogTitle>{editingUser ? '编辑用户' : '添加新用户'}</DialogTitle>
+                    <DialogDescription>{editingUser ? '修改用户信息和权限' : '创建新的系统用户并分配角色权限'}</DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -296,8 +466,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                       />
                     </div>
                   </div>
-                  <Button onClick={handleCreateUser} className="w-full">
-                    创建用户
+                  <Button onClick={editingUser ? handleUpdateUser : handleCreateUser} className="w-full">
+                    {editingUser ? '保存修改' : '创建用户'}
                   </Button>
                 </DialogContent>
               </Dialog>
@@ -336,7 +506,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <TableCell>{user.department || '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditUser(user)}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                             <Button
@@ -366,15 +536,33 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
               </div>
               <Dialog open={showCaseDialog} onOpenChange={setShowCaseDialog}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button onClick={() => {
+                    setEditingCase(null);
+                    setCaseName('');
+                    setCaseDepartment('');
+                    setCaseDisease('');
+                    setCasePopulation('');
+                    setCaseDifficulty('medium');
+                    setCaseDescription('');
+                    setCaseSymptoms('');
+                    setCaseDiagnosis('');
+                    setCaseTreatment('');
+                    setAispName('');
+                    setAispAge('');
+                    setAispGender('');
+                    setAispPersonality('');
+                    setAispAvatar('👤');
+                    setAispDigitalHumanUrl('');
+                    setAispVoiceProfile('standard');
+                  }}>
                     <Plus className="w-4 h-4 mr-2" />
                     添加病例
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>添加新病例</DialogTitle>
-                    <DialogDescription>创建新的病例并配置AISP数字人</DialogDescription>
+                    <DialogTitle>{editingCase ? '编辑病例' : '添加新病例'}</DialogTitle>
+                    <DialogDescription>{editingCase ? '修改病例信息和AISP数字人配置' : '创建新的病例并配置AISP数字人'}</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -548,8 +736,8 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                       </div>
                     </div>
 
-                    <Button onClick={handleCreateCase} className="w-full">
-                      创建病例
+                    <Button onClick={editingCase ? handleUpdateCase : handleCreateCase} className="w-full">
+                      {editingCase ? '保存修改' : '创建病例'}
                     </Button>
                   </div>
                 </DialogContent>
@@ -574,7 +762,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                           {caseItem.difficulty === 'easy' ? '简单' :
                            caseItem.difficulty === 'medium' ? '中等' : '困难'}
                         </Badge>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => handleEditCase(caseItem)}>
                           <Pencil className="w-4 h-4" />
                         </Button>
                         <Button
@@ -719,12 +907,18 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           {/* 知识库管理 */}
           <TabsContent value="knowledge" className="space-y-6">
             <Tabs defaultValue="sources" className="space-y-6">
-              <TabsList>
-                <TabsTrigger value="sources">
+              <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0 h-auto">
+                <TabsTrigger 
+                  value="sources"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2"
+                >
                   <Database className="w-4 h-4 mr-2" />
                   数据源管理
                 </TabsTrigger>
-                <TabsTrigger value="graph">
+                <TabsTrigger 
+                  value="graph"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2"
+                >
                   <Network className="w-4 h-4 mr-2" />
                   知识图谱
                 </TabsTrigger>
@@ -737,10 +931,86 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     <h3 className="text-xl font-bold">外部数据源</h3>
                     <p className="text-sm text-gray-600">连接和管理医学知识库</p>
                   </div>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    添加数据源
-                  </Button>
+                  <Dialog open={showSourceDialog} onOpenChange={setShowSourceDialog}>
+                    <Button onClick={() => {
+                      resetSourceForm();
+                      setShowSourceDialog(true);
+                    }}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      添加数据源
+                    </Button>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>{editingSource ? '编辑数据源' : '添加数据源'}</DialogTitle>
+                        <DialogDescription>
+                          {editingSource ? '修改数据源信息' : '添加新的医学知识库数据源'}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>名称 *</Label>
+                          <Input
+                            placeholder="输入数据源名称"
+                            value={sourceName}
+                            onChange={(e) => setSourceName(e.target.value)}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>类型</Label>
+                            <Select value={sourceType} onValueChange={(v: any) => setSourceType(v)}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="internal">内部知识库</SelectItem>
+                                <SelectItem value="external">外部接口</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>分类 *</Label>
+                            <Input
+                              placeholder="例如：指南、文献"
+                              value={sourceCategory}
+                              onChange={(e) => setSourceCategory(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>描述</Label>
+                          <Textarea
+                            placeholder="输入数据源描述"
+                            value={sourceDescription}
+                            onChange={(e) => setSourceDescription(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>URL (可选)</Label>
+                          <Input
+                            placeholder="输入数据源链接"
+                            value={sourceUrl}
+                            onChange={(e) => setSourceUrl(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>状态</Label>
+                          <Select value={sourceStatus} onValueChange={(v: any) => setSourceStatus(v)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">激活</SelectItem>
+                              <SelectItem value="inactive">未激活</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button onClick={editingSource ? handleUpdateSource : handleCreateSource} className="w-full">
+                          {editingSource ? '保存修改' : '创建数据源'}
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4">
@@ -804,7 +1074,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                                 同步
                               </Button>
                             )}
-                            <Button variant="ghost" size="sm">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditSource(source)}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                           </div>
