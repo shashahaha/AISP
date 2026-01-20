@@ -13,9 +13,12 @@
   [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
   <!-- 简介 -->
-  基于智谱AI GLM-4.7 的医学教育对话系统，提供虚拟患者问诊训练和智能评分功能
+  智能医学教育对话系统，提供虚拟患者问诊训练和AI评分功能
 
-  [快速开始](#-快速开始) · [功能特性](#-功能特性) · [API文档](#-api接口) · [系统架构](#-系统架构)
+  [快速开始](#-快速开始) · [功能特性](#-功能特性) · [系统架构](#-系统架构)
+
+  <!-- 标签 -->
+  **标签:** `医学教育` `虚拟患者` `AI评分` `问诊训练` `教育科技`
 
 </div>
 
@@ -27,7 +30,7 @@
 - **患者角色扮演** - 支持年龄、性格、症状的个性化设定
 - **情绪模拟** - 焦虑、疼痛等级等真实情感表达
 - **对话管理** - 自动开场白生成与多轮对话历史追踪
-- **提示词工程** - 基于 LangChain 的三层提示词管理
+- **提示词工程** - 三层提示词管理机制
 
 ### 📊 智能评分系统
 
@@ -38,9 +41,9 @@
 | **沟通** | 25% | 对话轮次 · 礼貌表达 · 共情能力 |
 
 ### 💾 数据持久化
-- **14张数据库表** - 覆盖用户、会话、病例、评分、学习管理
-- **完整评分记录** - 详细的评分维度与改进建议
-- **知识点追踪** - 学生知识点掌握度分析与学习路径规划
+- **完整的数据库设计** - 用户、会话、病例、评分、学习管理
+- **详细评分记录** - 多维度评分分析与改进建议
+- **学习追踪** - 知识点掌握度分析与学习路径规划
 
 ---
 
@@ -64,7 +67,7 @@ pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入 ZHIPU_API_KEY 和 DATABASE_URL
+# 编辑 .env 文件，填入必要的配置信息
 
 # 初始化数据库
 python scripts/init_db.py
@@ -73,7 +76,7 @@ python scripts/init_db.py
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-访问 http://localhost:8000/docs 查看 API 文档
+访问 API 文档页面查看完整接口说明
 
 ---
 
@@ -85,60 +88,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 └──────────────────────────┬──────────────────────────────────┘
                            │ REST/WebSocket
 ┌──────────────────────────▼──────────────────────────────────┐
-│                     API层 (FastAPI)                          │
-│   /api/chat/*  /api/scoring/*  /api/learning/*              │
+│                     API层                                    │
+│   对话接口  /  评分接口  /  学习管理接口                     │
 └──────────────────────────┬──────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │                       服务层                                 │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ ChatEngine   │  │ScoringEngine │  │LearningService│     │
-│  │ 对话生成     │  │ 评分计算     │  │ 学习追踪     │     │
+│  │对话引擎      │  │评分引擎      │  │学习服务      │     │
+│  │角色扮演生成  │  │多维度评分    │  │学习追踪      │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘     │
 └──────────────────────────┬──────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
 │                  PostgreSQL 数据库                            │
-│  14张表: users / cases / sessions / scoring / learning      │
+│  用户 / 病例 / 会话 / 评分 / 学习管理等模块                  │
 └──────────────────────────┬──────────────────────────────────┘
                            │
 ┌──────────────────────────▼──────────────────────────────────┐
-│                 智谱AI GLM-4.7 LLM服务                        │
+│                 LLM 服务                                     │
 └─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 🔌 API接口
-
-### 对话API
-
-| 端点 | 方法 | 描述 |
-|------|:---:|------|
-| `/api/chat/start` | POST | 开始问诊会话 |
-| `/api/chat/message` | POST | 发送问诊消息 |
-| `/api/chat/end` | POST | 结束会话并获取评分 |
-| `/api/chat/session/{id}` | GET | 获取会话详情 |
-| `/api/chat/sessions` | GET | 获取会话列表 |
-
-### 请求示例
-
-```python
-import requests
-
-# 开始会话
-response = requests.post('http://localhost:8000/api/chat/start',
-                        json={'case_id': 'case_001'})
-session_id = response.json()['session_id']
-
-# 发送消息
-response = requests.post('http://localhost:8000/api/chat/message',
-                        json={'session_id': session_id, 'message': '您好'})
-
-# 结束会话并评分
-response = requests.post('http://localhost:8000/api/chat/end',
-                        json={'session_id': session_id, 'diagnosis': '急性心肌梗死'})
-scores = response.json()['scores']
 ```
 
 ---
@@ -149,28 +118,26 @@ scores = response.json()['scores']
 AIMed/
 ├── app/
 │   ├── api/                    # API 路由层
-│   │   └── chat.py             # 对话相关接口
 │   ├── core/                   # 核心业务逻辑
-│   │   ├── chat_engine.py      # AI 对话引擎
+│   │   ├── chat_engine.py      # 对话引擎
 │   │   ├── prompt_manager.py   # 提示词管理
 │   │   └── scoring_engine.py   # 评分引擎
 │   ├── services/               # 服务层
 │   │   ├── session_service.py  # 会话服务
 │   │   └── scoring_service.py  # 评分服务
 │   ├── models/                 # 数据模型
-│   │   ├── database.py         # SQLAlchemy 模型
-│   │   └── schemas.py          # Pydantic 模型
+│   │   ├── database.py         # 数据库模型
+│   │   └── schemas.py          # 数据验证模型
 │   ├── db/                     # 数据库配置
-│   │   └── session.py          # 异步会话
-│   └── main.py                 # FastAPI 应用入口
+│   └── main.py                 # 应用入口
 │
 ├── scripts/                    # 工具脚本
 │   ├── init_db.py              # 数据库初始化
 │   ├── reset_db.py             # 数据库重置
-│   └── migrate_add_scoring.py  # 评分表迁移
+│   └── migrate_*.py            # 数据迁移脚本
 │
-├── docs/                       # 文档
-│   └── database_schema.md      # 数据库架构文档
+├── docs/                       # 文档目录
+│   └── database_schema.md      # 数据库设计文档
 │
 ├── .env                        # 环境变量配置
 ├── requirements.txt            # Python 依赖
@@ -185,47 +152,44 @@ AIMed/
 | 文档 | 描述 |
 |------|------|
 | [系统架构文档](AIserver.md) | 完整的系统设计与技术说明 |
-| [数据库架构](docs/database_schema.md) | 14张表的详细设计 |
+| [数据库架构](docs/database_schema.md) | 数据库表结构详细设计 |
 | [产品需求文档](AISP系统产品需求文档.md) | 产品功能需求规范 |
-| [API文档](http://localhost:8000/docs) | FastAPI 自动生成的交互式文档 |
 
 ---
 
 ## 🛠️ 技术栈
 
-| 组件 | 技术 | 版本 |
-|------|------|:---:|
-| Web 框架 | FastAPI | 0.109 |
-| LLM | 智谱AI GLM-4.7 | - |
-| 数据库 | PostgreSQL | 15+ |
-| ORM | SQLAlchemy | 2.0 |
-| 异步驱动 | asyncpg | - |
-| 提示词管理 | LangChain | - |
+| 组件 | 技术 |
+|------|------|
+| Web 框架 | FastAPI |
+| 数据库 | PostgreSQL + SQLAlchemy 2.0 |
+| 异步处理 | asyncio + asyncpg |
+| 提示词管理 | LangChain |
 
 ---
 
-## 📊 数据库结构
+## 📊 数据库设计
 
 ```
-核心业务层
-├── users              # 用户表
-├── cases              # 病例表
-├── chat_sessions      # 问诊会话
-└── messages           # 消息记录
+核心业务
+├── 用户管理
+├── 病例管理
+├── 问诊会话
+└── 消息记录
 
 评分系统
-├── scoring_rules              # 评分规则配置
-├── session_scores             # 会话评分详情
-├── question_coverage          # 关键问题覆盖
-├── diagnosis_records          # 诊断记录
-└── improvement_suggestions    # 改进建议
+├── 评分规则配置
+├── 会话评分详情
+├── 问题覆盖记录
+├── 诊断记录
+└── 改进建议
 
 学习管理
-├── learning_records            # 学习记录
-├── knowledge_points           # 知识点
-├── student_knowledge_mastery  # 知识点掌握度
-├── study_plans               # 学习计划
-└── learning_milestones       # 学习里程碑
+├── 学习记录
+├── 知识点库
+├── 掌握度追踪
+├── 学习计划
+└── 学习里程碑
 ```
 
 ---
