@@ -110,7 +110,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const showToastMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   const handleSaveUser = () => {
