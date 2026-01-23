@@ -47,6 +47,9 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'aisp';
   content: string;
+  type?: 'text' | 'audio'; // 消息类型
+  audioUrl?: string; // 真实录音文件的 URL (Blob URL)
+  duration?: number; // 语音时长(秒)
   timestamp: Date;
 }
 
@@ -56,12 +59,13 @@ export interface EvaluationResult {
   studentId: string;
   caseId: string;
   score: number;
-  communicationScore: number; // 沟通技巧
-  diagnosisScore: number; // 问诊情况
-  treatmentScore: number; // 诊疗方法
+  communicationScore: number;
+  diagnosisScore: number;
+  treatmentScore: number;
   feedback: string;
   timestamp: Date;
-  duration: number; // 练习时长（分钟）
+  duration: number; // 分钟
+  messages?: ChatMessage[]; // 对话历史记录
 }
 
 // 课程任务
