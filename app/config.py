@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: List[str] = ["http://localhost:3000"]
 
+    # JWT配置
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
+
     # 对话配置
     MAX_CONVERSATION_HISTORY: int = 20
     DEFAULT_TEMPERATURE: float = 0.7
