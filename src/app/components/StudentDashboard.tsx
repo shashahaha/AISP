@@ -14,6 +14,14 @@ import {
   TabsTrigger,
 } from "@/app/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/app/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -45,6 +53,8 @@ import {
   Users,
   Baby,
   Activity,
+  MessageSquare,
+  AudioWaveform,
 } from "lucide-react";
 
 interface StudentDashboardProps {
@@ -69,6 +79,8 @@ export function StudentDashboard({
     useState<string>("all");
   const [selectedPopulation, setSelectedPopulation] =
     useState<string>("all");
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [selectedHistoryEvaluation, setSelectedHistoryEvaluation] = useState<EvaluationResult | null>(null);
 
   // 获取学生的课程任务
   const myCourseTasks = mockCourseTasks.filter((task) =>
@@ -109,6 +121,17 @@ export function StudentDashboard({
         ];
       setSelectedCase(randomCase);
     }
+  };
+
+  const handleCloseHistory = () => {
+    // 停止所有音频播放
+    window.speechSynthesis.cancel();
+    document.querySelectorAll('audio').forEach(a => {
+        (a as HTMLAudioElement).pause();
+        (a as HTMLAudioElement).currentTime = 0;
+    });
+    setPlayingAudioId(null);
+    setSelectedHistoryEvaluation(null);
   };
 
   const handleStartCourseTask = (task: CourseTask) => {
@@ -160,6 +183,54 @@ export function StudentDashboard({
         return "⭐⭐⭐";
       default:
         return "";
+    }
+  };
+
+  const stopAudio = () => {
+    window.speechSynthesis.cancel();
+    document.querySelectorAll('audio').forEach(a => {
+        (a as HTMLAudioElement).pause();
+        (a as HTMLAudioElement).currentTime = 0;
+    });
+    setPlayingAudioId(null);
+  };
+
+  const playAudio = (content: string, id: string, hasUrl: boolean = false) => {
+    if (playingAudioId === id) {
+      stopAudio();
+      return;
+    }
+
+    // 停止其他播放
+    stopAudio();
+
+    setPlayingAudioId(id);
+
+    if (hasUrl) {
+      const audio = document.getElementById(`history-audio-${id}`) as HTMLAudioElement;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.play().catch(e => {
+            console.error("Audio play failed, falling back to TTS", e);
+            // 回退到 TTS
+            const utterance = new SpeechSynthesisUtterance(content);
+            utterance.lang = 'zh-CN';
+            utterance.onend = () => setPlayingAudioId(null);
+            window.speechSynthesis.speak(utterance);
+        });
+        audio.onended = () => setPlayingAudioId(null);
+      } else {
+         // 没有找到 audio 元素，使用 TTS
+         const utterance = new SpeechSynthesisUtterance(content);
+         utterance.lang = 'zh-CN';
+         utterance.onend = () => setPlayingAudioId(null);
+         window.speechSynthesis.speak(utterance);
+      }
+    } else {
+      const utterance = new SpeechSynthesisUtterance(content);
+      utterance.lang = 'zh-CN';
+      utterance.onend = () => setPlayingAudioId(null);
+      window.speechSynthesis.speak(utterance);
     }
   };
 
@@ -615,6 +686,18 @@ export function StudentDashboard({
                               </p>
                             </div>
                           )}
+
+                          {evaluation.messages && evaluation.messages.length > 0 && (
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="w-full mt-4"
+                              onClick={() => setSelectedHistoryEvaluation(evaluation)}
+                            >
+                              <MessageSquare className="w-4 h-4 mr-2" />
+                              查看对话历史
+                            </Button>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -624,6 +707,51 @@ export function StudentDashboard({
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* 历史记录对话详情弹窗 */}
+      <Dialog open={!!selectedHistoryEvaluation} onOpenChange={(open) => !open && handleCloseHistory()}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>对话历史记录</DialogTitle>
+            <DialogDescription>
+              回顾您与 {selectedHistoryEvaluation && mockCases.find(c => c.id === selectedHistoryEvaluation.caseId)?.aisp.name} 的完整对话过程
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 rounded-lg border">
+            {selectedHistoryEvaluation?.messages?.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                    msg.role === 'user'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-white border border-gray-200 text-gray-900'
+                  }`}
+                >
+                  {msg.type === 'audio' ? (
+                    <div 
+                      className="flex items-center gap-2 cursor-pointer"
+                      onClick={() => playAudio(msg.content, msg.id, !!msg.audioUrl)}
+                    >
+                      <div className={playingAudioId === msg.id ? "animate-pulse text-blue-300" : ""}>
+                          <AudioWaveform className="w-4 h-4" />
+                      </div>
+                      <span>{msg.duration}''</span>
+                      {msg.audioUrl && (
+                          <audio id={`history-audio-${msg.id}`} src={msg.audioUrl} className="hidden" />
+                      )}
+                    </div>
+                  ) : (
+                    <p>{msg.content}</p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -9,6 +9,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/app/components/ui/badge';
 import { Checkbox } from '@/app/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/app/components/ui/alert-dialog";
 import { User, CourseTask, CaseItem } from '@/app/types';
 import { mockCases, mockCourseTasks, mockUsers, mockEvaluations, mockLearningStats } from '@/app/mockData';
 import { LogOut, BookOpen, BarChart3, User as UserIcon, Plus, TrendingUp, Clock, Award, FileText, Pencil, Trash2, Send } from 'lucide-react';
@@ -28,6 +38,9 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   const [selectedCases, setSelectedCases] = useState<string[]>([]);
   const [taskDifficulty, setTaskDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
+  const [editingTask, setEditingTask] = useState<CourseTask | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
 
   // 病例管理相关状态
   const [showCaseDialog, setShowCaseDialog] = useState(false);
@@ -49,30 +62,75 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   const students = mockUsers.filter(u => u.role === 'student');
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
+  const [showToast, setShowToast] = useState(false);
+
   // 筛选教师自己的病例
   const myCases = cases.filter(c => c.creatorId === user.id);
   const approvedCases = cases.filter(c => c.status === 'approved');
 
-  const handleCreateTask = () => {
-    if (!taskName || selectedCases.length === 0) return;
-
-    const newTask: CourseTask = {
-      id: `task${tasks.length + 1}`,
-      name: taskName,
-      description: taskDescription,
-      teacherId: user.id,
-      caseIds: selectedCases,
-      difficulty: taskDifficulty,
-      createdAt: new Date(),
-      assignedStudents: selectedStudents,
-    };
-
-    setTasks([...tasks, newTask]);
-    setShowCreateDialog(false);
+  const resetTaskForm = () => {
     setTaskName('');
     setTaskDescription('');
     setSelectedCases([]);
     setSelectedStudents([]);
+    setTaskDifficulty('medium');
+    setEditingTask(null);
+  };
+
+  const handleOpenCreateDialog = () => {
+    resetTaskForm();
+    setShowCreateDialog(true);
+  };
+
+  const handleOpenEditDialog = (task: CourseTask) => {
+    setTaskName(task.name);
+    setTaskDescription(task.description);
+    setSelectedCases(task.caseIds);
+    setSelectedStudents(task.assignedStudents);
+    setTaskDifficulty(task.difficulty);
+    setEditingTask(task);
+    setShowCreateDialog(true);
+  };
+
+  const handleCreateOrUpdateTask = () => {
+    if (!taskName || selectedCases.length === 0) return;
+
+    if (editingTask) {
+      setTasks(tasks.map(t => t.id === editingTask.id ? {
+        ...t,
+        name: taskName,
+        description: taskDescription,
+        caseIds: selectedCases,
+        difficulty: taskDifficulty,
+        assignedStudents: selectedStudents
+      } : t));
+    } else {
+      const newTask: CourseTask = {
+        id: `task${tasks.length + 1}`,
+        name: taskName,
+        description: taskDescription,
+        teacherId: user.id,
+        caseIds: selectedCases,
+        difficulty: taskDifficulty,
+        createdAt: new Date(),
+        assignedStudents: selectedStudents,
+      };
+      setTasks([...tasks, newTask]);
+    }
+
+    setShowCreateDialog(false);
+    resetTaskForm();
+  };
+
+  const handleDeleteTask = (taskId: string) => {
+    setDeleteTaskId(taskId);
+  };
+
+  const confirmDeleteTask = () => {
+    if (deleteTaskId) {
+      setTasks(tasks.filter(t => t.id !== deleteTaskId));
+      setDeleteTaskId(null);
+    }
   };
 
   const handleCaseToggle = (caseId: string) => {
@@ -91,9 +149,29 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
     );
   };
 
+  const handleToggleAllCases = () => {
+    if (selectedCases.length === approvedCases.length) {
+      setSelectedCases([]);
+    } else {
+      setSelectedCases(approvedCases.map(c => c.id));
+    }
+  };
+
+  const handleToggleAllStudents = () => {
+    if (selectedStudents.length === students.length) {
+      setSelectedStudents([]);
+    } else {
+      setSelectedStudents(students.map(s => s.id));
+    }
+  };
+
   // 病例管理功能
   const handleCreateCase = () => {
-    if (!caseName || !caseDepartment || !caseDisease || !aispName) return;
+    if (!caseName || !caseDepartment || !caseDisease || !aispName) {
+      setShowToast(true);
+      setTimeout(() => setShowToast(false), 2000);
+      return;
+    }
 
     const newCase: CaseItem = {
       id: `case${cases.length + 1}`,
@@ -124,7 +202,14 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   };
 
   const handleDeleteCase = (caseId: string) => {
-    setCases(cases.filter(c => c.id !== caseId));
+    setDeleteCaseId(caseId);
+  };
+
+  const confirmDeleteCase = () => {
+    if (deleteCaseId) {
+      setCases(cases.filter(c => c.id !== deleteCaseId));
+      setDeleteCaseId(null);
+    }
   };
 
   const handleSubmitToKnowledgeBase = (caseId: string) => {
@@ -232,25 +317,22 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-semibold">课程任务管理</h2>
-                <p className="text-gray-500">创建和管理学习任务</p>
               </div>
               <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    创建任务
-                  </Button>
-                </DialogTrigger>
+                <Button onClick={handleOpenCreateDialog}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  创建任务
+                </Button>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>创建学习任务</DialogTitle>
+                    <DialogTitle>{editingTask ? '编辑学习任务' : '创建学习任务'}</DialogTitle>
                     <DialogDescription>
-                      组合病例库，设定学习任务供学生练习
+                      {editingTask ? '修改学习任务内容' : '组合病例库，设定学习任务供学生练习'}
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label>任务名称</Label>
+                      <Label>任务名称 *</Label>
                       <Input
                         placeholder="输入任务名称"
                         value={taskName}
@@ -258,7 +340,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>任务描述</Label>
+                      <Label>任务描述 *</Label>
                       <Textarea
                         placeholder="输入任务描述"
                         value={taskDescription}
@@ -267,7 +349,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>难度等级</Label>
+                      <Label>难度等级 *</Label>
                       <Select value={taskDifficulty} onValueChange={(v: any) => setTaskDifficulty(v)}>
                         <SelectTrigger>
                           <SelectValue />
@@ -280,7 +362,17 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label>选择病例（已选 {selectedCases.length} 个）</Label>
+                      <div className="flex items-center justify-between">
+                        <Label>选择病例 * （已选 {selectedCases.length} 个）</Label>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-xs text-blue-600 hover:text-blue-700 p-0"
+                          onClick={handleToggleAllCases}
+                        >
+                          {selectedCases.length === approvedCases.length ? '取消全选' : '全选'}
+                        </Button>
+                      </div>
                       <div className="border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2">
                         {approvedCases.map(caseItem => (
                           <div key={caseItem.id} className="flex items-center space-x-2">
@@ -308,7 +400,17 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>分配学生（已选 {selectedStudents.length} 人）</Label>
+                      <div className="flex items-center justify-between">
+                        <Label>分配学生 * （已选 {selectedStudents.length} 人）</Label>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 text-xs text-blue-600 hover:text-blue-700 p-0"
+                          onClick={handleToggleAllStudents}
+                        >
+                          {selectedStudents.length === students.length ? '取消全选' : '全选'}
+                        </Button>
+                      </div>
                       <div className="border rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
                         {students.map(student => (
                           <div key={student.id} className="flex items-center space-x-2">
@@ -328,35 +430,60 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                       </div>
                     </div>
                     <Button
-                      onClick={handleCreateTask}
+                      onClick={handleCreateOrUpdateTask}
                       className="w-full"
-                      disabled={!taskName || selectedCases.length === 0}
+                      disabled={!taskName || !taskDescription || selectedCases.length === 0 || selectedStudents.length === 0}
                     >
-                      创建任务
+                      {editingTask ? '保存修改' : '创建任务'}
                     </Button>
                   </div>
                 </DialogContent>
               </Dialog>
+
+              <AlertDialog open={!!deleteTaskId} onOpenChange={(open) => !open && setDeleteTaskId(null)}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>确认删除</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      您确定要删除这个学习任务吗？此操作无法撤销。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>取消</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDeleteTask} className="bg-red-500 hover:bg-red-600">
+                      删除
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
 
             {/* 任务列表 */}
             <div className="grid grid-cols-1 gap-4">
-              {tasks.map(task => (
+              {[...tasks].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map(task => (
                 <Card key={task.id}>
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <CardTitle>{task.name}</CardTitle>
-                        <CardDescription>{task.description}</CardDescription>
+                        <CardDescription className="text-xs mt-1">{task.description}</CardDescription>
                       </div>
-                      <Badge className={
-                        task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                        task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }>
-                        {task.difficulty === 'easy' ? '简单' : 
-                         task.difficulty === 'medium' ? '中等' : '困难'}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge className={
+                          task.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                          task.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }>
+                          {task.difficulty === 'easy' ? '简单' : 
+                           task.difficulty === 'medium' ? '中等' : '困难'}
+                        </Badge>
+                        <Button variant="ghost" size="icon" onClick={() => handleOpenEditDialog(task)}>
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-600" onClick={() => handleDeleteTask(task.id)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -421,7 +548,6 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-2xl font-semibold">病例库管理</h2>
-                <p className="text-gray-500">创建和管理病例，提交到知识库</p>
               </div>
               <Dialog open={showCaseDialog} onOpenChange={setShowCaseDialog}>
                 <DialogTrigger asChild>
@@ -588,10 +714,16 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                     <Button
                       onClick={handleCreateCase}
                       className="w-full"
-                      disabled={!caseName || !caseDepartment || !caseDisease || !aispName}
                     >
                       创建病例
                     </Button>
+                    {showToast && (
+                      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+                        <div className="bg-red-500 text-white px-4 py-2 rounded shadow-lg text-sm animate-in fade-in slide-in-from-top-2">
+                          必填项为空
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </DialogContent>
               </Dialog>
@@ -606,7 +738,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                   </CardContent>
                 </Card>
               ) : (
-                myCases.map((caseItem) => (
+                [...myCases].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((caseItem) => (
                   <Card key={caseItem.id}>
                     <CardHeader>
                       <div className="flex items-start justify-between">
@@ -695,6 +827,23 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                 ))
               )}
             </div>
+            
+            <AlertDialog open={!!deleteCaseId} onOpenChange={(open) => !open && setDeleteCaseId(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认删除</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    您确定要删除这个病例吗？此操作无法撤销。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction onClick={confirmDeleteCase} className="bg-red-500 hover:bg-red-600">
+                    删除
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           {/* 学习看板 */}
@@ -905,7 +1054,6 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
             <Card>
               <CardHeader>
                 <CardTitle>个人信息</CardTitle>
-                <CardDescription>查看和管理您的个人资料</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

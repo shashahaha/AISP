@@ -191,6 +191,45 @@ export const mockEvaluations: EvaluationResult[] = [
     feedback: '问诊全面，沟通技巧良好。建议加强对治疗方案的完整性考虑。',
     timestamp: new Date('2026-01-10T10:30:00'),
     duration: 15,
+    messages: [
+      {
+        id: 'm1',
+        role: 'aisp',
+        content: '您好，医生。我是李明，今年28岁。我感觉不太舒服，头痛、发热已经3天了。',
+        type: 'text',
+        timestamp: new Date('2026-01-10T10:15:00'),
+      },
+      {
+        id: 'm2',
+        role: 'user',
+        content: '你好，除了头痛发热，还有其他症状吗？比如咳嗽、流鼻涕？',
+        type: 'text',
+        timestamp: new Date('2026-01-10T10:15:30'),
+      },
+      {
+        id: 'm3',
+        role: 'aisp',
+        content: '有的，稍微有点流鼻涕，偶尔咳嗽几声，但不严重。',
+        type: 'audio',
+        duration: 5,
+        timestamp: new Date('2026-01-10T10:16:00'),
+      },
+      {
+        id: 'm4',
+        role: 'user',
+        content: '好的，体温最高多少度？吃过什么药吗？',
+        type: 'audio',
+        duration: 4,
+        timestamp: new Date('2026-01-10T10:16:45'),
+      },
+      {
+        id: 'm5',
+        role: 'aisp',
+        content: '昨天晚上量是38.5度，吃了点布洛芬，退了一点，今早又烧起来了。',
+        type: 'text',
+        timestamp: new Date('2026-01-10T10:17:10'),
+      },
+    ]
   },
   {
     id: 'eval2',
@@ -203,6 +242,30 @@ export const mockEvaluations: EvaluationResult[] = [
     feedback: '在与儿童及家长沟通时需要更耐心，问诊思路清晰。',
     timestamp: new Date('2026-01-11T14:20:00'),
     duration: 20,
+    messages: [
+      {
+        id: 'm2-1',
+        role: 'aisp',
+        content: '医生，我家孩子小明最近老是咳嗽，还有点气喘，都5天了。',
+        type: 'text',
+        timestamp: new Date('2026-01-11T14:00:00'),
+      },
+      {
+        id: 'm2-2',
+        role: 'user',
+        content: '家长别急，孩子发烧吗？咳嗽有痰吗？',
+        type: 'text',
+        timestamp: new Date('2026-01-11T14:00:45'),
+      },
+      {
+        id: 'm2-3',
+        role: 'aisp',
+        content: '有发烧，前两天39度，现在37.8度左右。咳嗽有痰，听着呼噜呼噜的。',
+        type: 'audio',
+        duration: 8,
+        timestamp: new Date('2026-01-11T14:01:20'),
+      },
+    ]
   },
   {
     id: 'eval3',
@@ -295,7 +358,7 @@ export const mockKnowledgeSources: KnowledgeSource[] = [
     id: 'ks1',
     name: '内部病例库',
     type: 'internal',
-    description: '系���内部创建和维护的病例数据',
+    description: '系统内部创建和维护的病例数据',
     status: 'active',
     caseCount: 126,
     category: '综合',
