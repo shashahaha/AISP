@@ -1,8 +1,14 @@
 // src/app/App.tsx
 import { AppRouter } from './router';
+import { Toaster } from './components/ui/sonner';
 
 function App() {
-  return <AppRouter />;
+  return (
+    <>
+      <AppRouter />
+      <Toaster />
+    </>
+  );
 }
 
 export default App;

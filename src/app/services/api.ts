@@ -51,6 +51,23 @@ export interface ChatMessageResponse {
   turn_count: number;
 }
 
+export interface Case {
+  id: number;
+  case_id: string;
+  title: string;
+  description?: string;
+  difficulty: string;
+  category: string;
+  patient_info: Record<string, any>;
+  chief_complaint: Record<string, any>;
+  symptoms: Record<string, any>;
+  standard_diagnosis: string;
+  differential_diagnosis?: string[];
+  key_questions?: string[];
+  is_active: number;
+  created_at?: string;
+}
+
 export interface SessionScoreResponse {
   session_id: string;
   completed_at: string;
@@ -116,13 +133,49 @@ export const authAPI = {
 
 // 病例接口
 export const casesAPI = {
-  list: async () => {
-    const response = await apiClient.get('/api/cases/');
+  list: async (filters?: { category?: string; difficulty?: string; is_active?: boolean }): Promise<Case[]> => {
+    const params = new URLSearchParams();
+    if (filters?.category) params.append('category', filters.category);
+    if (filters?.difficulty) params.append('difficulty', filters.difficulty);
+    if (filters?.is_active !== undefined) params.append('is_active', filters.is_active.toString());
+
+    const response = await apiClient.get(`/api/cases?${params}`);
     return response.data;
   },
 
-  get: async (caseId: string) => {
+  get: async (caseId: string): Promise<Case> => {
     const response = await apiClient.get(`/api/cases/${caseId}`);
+    return response.data;
+  },
+
+  create: async (caseData: {
+    case_id: string;
+    title: string;
+    description?: string;
+    difficulty?: string;
+    category?: string;
+    patient_info: Record<string, any>;
+    chief_complaint: Record<string, any>;
+    symptoms: Record<string, any>;
+    standard_diagnosis: string;
+    differential_diagnosis?: string[];
+    key_questions?: string[];
+  }): Promise<Case> => {
+    const response = await apiClient.post('/api/cases', caseData);
+    return response.data;
+  },
+
+  update: async (caseId: string, caseData: Partial<Case>): Promise<Case> => {
+    const response = await apiClient.put(`/api/cases/${caseId}`, caseData);
+    return response.data;
+  },
+
+  delete: async (caseId: string): Promise<void> => {
+    await apiClient.delete(`/api/cases/${caseId}`);
+  },
+
+  getCategories: async (): Promise<string[]> => {
+    const response = await apiClient.get('/api/cases/categories/list');
     return response.data;
   },
 };

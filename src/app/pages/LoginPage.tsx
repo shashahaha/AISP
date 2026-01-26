@@ -6,6 +6,7 @@ import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
 import { useAuthStore } from '@/app/stores';
 import { authAPI } from '@/app/services/api';
+import { toastUtils } from '@/app/lib/toast';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
@@ -25,6 +26,7 @@ export function LoginPage() {
       const { access_token, user } = response;
 
       setAuth(user, access_token);
+      toastUtils.success(`欢迎回来，${user.username}！`);
 
       // 根据角色跳转
       switch (user.role) {
@@ -41,7 +43,9 @@ export function LoginPage() {
           navigate('/student');
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || '登录失败，请检查用户名和密码');
+      const errorMsg = err.response?.data?.detail || '登录失败，请检查用户名和密码';
+      setError(errorMsg);
+      toastUtils.error(errorMsg);
     } finally {
       setLoading(false);
     }

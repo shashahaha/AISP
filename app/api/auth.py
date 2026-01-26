@@ -1,9 +1,9 @@
 # app/api/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Dict
+from typing import Dict, Optional
 from datetime import timedelta
 
 from app.models.database import User
@@ -18,6 +18,48 @@ from app.utils.auth import (
 from app.config import settings
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
+security = HTTPBearer()
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_async_db)
+) -> User:
+    """从JWT token获取当前用户"""
+    token = credentials.credentials
+    payload = decode_token(token)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效的认证凭据"
+        )
+
+    result = await db.execute(
+        select(User).where(User.id == payload["user_id"])
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    db: AsyncSession = Depends(get_async_db)
+) -> Optional[User]:
+    """可选的当前用户（允许未登录）"""
+    if not credentials:
+        return None
+
+    token = credentials.credentials
+    payload = decode_token(token)
+    if payload is None:
+        return None
+
+    result = await db.execute(
+        select(User).where(User.id == payload["user_id"])
+    )
+    return result.scalar_one_or_none()
 
 
 @router.post("/register", response_model=UserResponse)
