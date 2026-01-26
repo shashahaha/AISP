@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.api import chat, websocket
+from app.api import chat, websocket, auth
 from contextlib import asynccontextmanager
 import logging
 
@@ -44,6 +44,7 @@ app.add_middleware(
 )
 
 # 注册路由
+app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(websocket.router)
 
