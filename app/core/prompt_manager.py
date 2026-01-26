@@ -1,6 +1,10 @@
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.schema import SystemMessage, HumanMessage
 from typing import Dict, Any, List
+
+# LangChain 导入 (兼容新旧版本)
+try:
+    from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+except ImportError:
+    from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 
 class PromptManager:

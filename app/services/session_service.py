@@ -33,14 +33,44 @@ class SessionService:
         Returns:
             创建的ChatSession对象
         """
+        # 先查找或创建病例记录
+        case_result = await self.db.execute(
+            select(Case).where(Case.case_id == case_id)
+        )
+        case = case_result.scalar_one_or_none()
+
+        if not case:
+            # 病例不存在，创建新病例
+            patient_info = case_data.get("patient_info", {})
+            symptoms = case_data.get("symptoms", {})
+            chief_complaint = case_data.get("chief_complaint", {})
+
+            case = Case(
+                case_id=case_id,
+                title=case_data.get("title", f"病例-{case_id}"),
+                description=case_data.get("description"),
+                difficulty=case_data.get("difficulty", "medium"),
+                category=case_data.get("category", "内科"),
+                patient_info=patient_info,
+                chief_complaint=chief_complaint,
+                symptoms=symptoms,
+                standard_diagnosis=case_data.get("standard_diagnosis"),
+                differential_diagnosis=case_data.get("differential_diagnosis", []),
+                key_questions=case_data.get("key_questions", []),
+                created_by=user_id,
+                is_active=1
+            )
+            self.db.add(case)
+            await self.db.flush()
+
         # 生成唯一会话ID
         session_uuid = str(uuid.uuid4())
 
-        # 创建会话记录
+        # 创建会话记录（使用case的数据库id）
         db_session = ChatSession(
             session_id=session_uuid,
             user_id=user_id,
-            case_id=case_id,  # 这里暂时存储字符串case_id
+            case_id=case.id,  # 使用Case表的数据库ID
             status=SessionStatus.ACTIVE,
             conversation_history=[],
             turn_count=0,
@@ -65,7 +95,10 @@ class SessionService:
         result = await self.db.execute(
             select(ChatSession)
             .where(ChatSession.session_id == session_id)
-            .options(selectinload(ChatSession.messages))
+            .options(
+                selectinload(ChatSession.messages),
+                selectinload(ChatSession.case)  # 预加载Case关联
+            )
         )
         return result.scalar_one_or_none()
 
@@ -79,17 +112,27 @@ class SessionService:
 
         Args:
             user_id: 用户ID
-            case_id: 病例ID
+            case_id: 病例ID (字符串，如 "case_001")
 
         Returns:
             活跃的ChatSession对象或None
         """
+        # 先获取Case的数据库ID
+        case_result = await self.db.execute(
+            select(Case).where(Case.case_id == case_id)
+        )
+        case = case_result.scalar_one_or_none()
+
+        if not case:
+            return None
+
+        # 使用Case的数据库ID查询会话
         result = await self.db.execute(
             select(ChatSession)
             .where(
                 and_(
                     ChatSession.user_id == user_id,
-                    ChatSession.case_id == case_id,
+                    ChatSession.case_id == case.id,  # 使用数据库ID
                     ChatSession.status == SessionStatus.ACTIVE
                 )
             )
@@ -127,7 +170,7 @@ class SessionService:
             session_id=session.id,
             role=role,
             content=content,
-            metadata=metadata or {},
+            meta_data=metadata or {},
             timestamp=datetime.utcnow()
         )
 
