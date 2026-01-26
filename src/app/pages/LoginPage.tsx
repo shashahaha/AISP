@@ -53,9 +53,9 @@ export function LoginPage() {
 
   const handleQuickLogin = async (role: 'student' | 'teacher' | 'admin') => {
     const credentials = {
-      student: { username: 'student1', password: 'password123' },
-      teacher: { username: 'teacher1', password: 'password123' },
-      admin: { username: 'admin', password: 'admin123' },
+      student: { username: 'student', password: '123456' },
+      teacher: { username: 'teacher', password: '123456' },
+      admin: { username: 'admin', password: '123456' },
     };
 
     const { username: u, password: p } = credentials[role];
@@ -137,9 +137,9 @@ export function LoginPage() {
           <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm">
             <p className="font-medium mb-2">快速登录：</p>
             <div className="space-y-1 text-gray-600">
-              <p>学生: student1 / password123</p>
-              <p>教师: teacher1 / password123</p>
-              <p>超管: admin / admin123</p>
+              <p>学生: student / 123456</p>
+              <p>教师: teacher / 123456</p>
+              <p>超管: admin / 123456</p>
             </div>
             <div className="mt-3 flex gap-2">
               <Button

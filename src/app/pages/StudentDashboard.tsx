@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "@/app/stores";
 import {
   Card,
   CardContent,
@@ -40,7 +42,7 @@ import {
   mockEvaluations,
   mockCourseTasks,
 } from "@/app/mockData";
-import { AISPDialog } from "./AISPDialog";
+import { AISPDialog } from "@/app/components/AISPDialog";
 import {
   LogOut,
   Award,
@@ -57,20 +59,20 @@ import {
   AudioWaveform,
 } from "lucide-react";
 
-interface StudentDashboardProps {
-  user: User;
-  onLogout: () => void;
-}
+export function StudentDashboard() {
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
+  
+  const handleLogout = () => {
+    clearAuth();
+    navigate("/login");
+  };
 
-export function StudentDashboard({
-  user,
-  onLogout,
-}: StudentDashboardProps) {
   const [selectedCase, setSelectedCase] =
     useState<CaseItem | null>(null);
   const [evaluations, setEvaluations] = useState<
     EvaluationResult[]
-  >(mockEvaluations.filter((e) => e.studentId === user.id));
+  >(user ? mockEvaluations.filter((e) => e.studentId === user.id) : []);
 
   // 筛选条件
   const [selectedDepartment, setSelectedDepartment] =
@@ -83,9 +85,11 @@ export function StudentDashboard({
   const [selectedHistoryEvaluation, setSelectedHistoryEvaluation] = useState<EvaluationResult | null>(null);
 
   // 获取学生的课程任务
-  const myCourseTasks = mockCourseTasks.filter((task) =>
+  const myCourseTasks = user ? mockCourseTasks.filter((task) =>
     task.assignedStudents.includes(user.id),
-  );
+  ) : [];
+
+  if (!user) return null;
 
   const handleCaseComplete = (evaluation: EvaluationResult) => {
     setEvaluations([...evaluations, evaluation]);
@@ -265,7 +269,7 @@ export function StudentDashboard({
           </div>
           <Button
             variant="ghost"
-            onClick={onLogout}
+            onClick={handleLogout}
             className="gap-2"
           >
             <LogOut className="w-4 h-4" />

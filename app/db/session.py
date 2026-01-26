@@ -2,13 +2,21 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
+# 异步引擎配置
+engine_kwargs = {
+    "echo": settings.DEBUG,
+    "pool_pre_ping": True,
+}
+
+# SQLite不支持pool_size和max_overflow
+if "sqlite" not in settings.DATABASE_URL:
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+
 # 异步引擎
 async_engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20
+    **engine_kwargs
 )
 
 # 异步会话工厂

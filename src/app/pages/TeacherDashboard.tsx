@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/app/stores';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -21,15 +23,18 @@ import {
 } from "@/app/components/ui/alert-dialog";
 import { User, CourseTask, CaseItem } from '@/app/types';
 import { mockCases, mockCourseTasks, mockUsers, mockEvaluations, mockLearningStats } from '@/app/mockData';
-import { LogOut, BookOpen, BarChart3, User as UserIcon, Plus, TrendingUp, Clock, Award, FileText, Pencil, Trash2, Send } from 'lucide-react';
+import { LogOut, BookOpen, BarChart3, User as UserIcon, Plus, TrendingUp, Clock, Award, FileText, Pencil, Trash2, Send, XCircle } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-interface TeacherDashboardProps {
-  user: User;
-  onLogout: () => void;
-}
+export function TeacherDashboard() {
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
 
-export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
+
   const [tasks, setTasks] = useState<CourseTask[]>(mockCourseTasks);
   const [cases, setCases] = useState<CaseItem[]>(mockCases);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -58,11 +63,14 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   const [aispGender, setAispGender] = useState('');
   const [aispPersonality, setAispPersonality] = useState('');
   const [aispAvatar, setAispAvatar] = useState('👤');
+  const [editingCase, setEditingCase] = useState<CaseItem | null>(null);
 
   const students = mockUsers.filter(u => u.role === 'student');
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
   const [showToast, setShowToast] = useState(false);
+  
+  if (!user) return null;
 
   // 筛选教师自己的病例
   const myCases = cases.filter(c => c.creatorId === user.id);
@@ -166,39 +174,86 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   };
 
   // 病例管理功能
-  const handleCreateCase = () => {
+  const handleCreateOrUpdateCase = () => {
     if (!caseName || !caseDepartment || !caseDisease || !aispName) {
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2000);
       return;
     }
 
-    const newCase: CaseItem = {
-      id: `case${cases.length + 1}`,
-      name: caseName,
-      department: caseDepartment,
-      disease: caseDisease,
-      population: casePopulation,
-      difficulty: caseDifficulty,
-      description: caseDescription,
-      symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
-      diagnosis: caseDiagnosis,
-      treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
-      aisp: {
-        avatar: aispAvatar,
-        name: aispName,
-        age: parseInt(aispAge) || 30,
-        gender: aispGender,
-        personality: aispPersonality,
-      },
-      creatorId: user.id,
-      creatorName: user.name,
-      status: 'pending',
-      createdAt: new Date(),
-    };
+    if (editingCase) {
+      setCases(cases.map(c => c.id === editingCase.id ? {
+        ...c,
+        name: caseName,
+        department: caseDepartment,
+        disease: caseDisease,
+        population: casePopulation,
+        difficulty: caseDifficulty,
+        description: caseDescription,
+        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+        diagnosis: caseDiagnosis,
+        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
+        aisp: {
+          avatar: aispAvatar,
+          name: aispName,
+          age: parseInt(aispAge) || 30,
+          gender: aispGender,
+          personality: aispPersonality,
+        },
+      } : c));
+    } else {
+      const newCase: CaseItem = {
+        id: `case${cases.length + 1}`,
+        name: caseName,
+        department: caseDepartment,
+        disease: caseDisease,
+        population: casePopulation,
+        difficulty: caseDifficulty,
+        description: caseDescription,
+        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+        diagnosis: caseDiagnosis,
+        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
+        aisp: {
+          avatar: aispAvatar,
+          name: aispName,
+          age: parseInt(aispAge) || 30,
+          gender: aispGender,
+          personality: aispPersonality,
+        },
+        creatorId: user.id,
+        creatorName: user.name,
+        status: 'pending',
+        createdAt: new Date(),
+      };
+      setCases([...cases, newCase]);
+    }
 
-    setCases([...cases, newCase]);
     resetCaseForm();
+  };
+
+  const handleOpenEditCaseDialog = (caseItem: CaseItem) => {
+    setCaseName(caseItem.name);
+    setCaseDepartment(caseItem.department);
+    setCaseDisease(caseItem.disease);
+    setCasePopulation(caseItem.population);
+    setCaseDifficulty(caseItem.difficulty);
+    setCaseDescription(caseItem.description);
+    setCaseSymptoms(caseItem.symptoms.join(', '));
+    setCaseDiagnosis(caseItem.diagnosis);
+    setCaseTreatment(caseItem.treatment.join(', '));
+    setAispName(caseItem.aisp.name);
+    setAispAge(caseItem.aisp.age.toString());
+    setAispGender(caseItem.aisp.gender);
+    setAispPersonality(caseItem.aisp.personality);
+    setAispAvatar(caseItem.aisp.avatar);
+    
+    setEditingCase(caseItem);
+    setShowCaseDialog(true);
+  };
+
+  const handleOpenCreateCaseDialog = () => {
+    resetCaseForm();
+    setShowCaseDialog(true);
   };
 
   const handleDeleteCase = (caseId: string) => {
@@ -234,6 +289,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
     setAispGender('');
     setAispPersonality('');
     setAispAvatar('👤');
+    setEditingCase(null);
   };
 
   const getStatusBadge = (status: string) => {
@@ -284,7 +340,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
             <h1 className="text-xl font-semibold">AISP 教学系统 - 教师端</h1>
             <p className="text-sm text-gray-500">欢迎，{user.name}</p>
           </div>
-          <Button variant="ghost" onClick={onLogout}>
+          <Button variant="ghost" onClick={handleLogout}>
             <LogOut className="w-4 h-4 mr-2" />
             退出登录
           </Button>
@@ -550,16 +606,14 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                 <h2 className="text-2xl font-semibold">病例库管理</h2>
               </div>
               <Dialog open={showCaseDialog} onOpenChange={setShowCaseDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="w-4 h-4 mr-2" />
-                    创建病例
-                  </Button>
-                </DialogTrigger>
+                <Button onClick={handleOpenCreateCaseDialog}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  创建病例
+                </Button>
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
-                    <DialogTitle>创建新病例</DialogTitle>
-                    <DialogDescription>创建病例并配置AISP数字人</DialogDescription>
+                    <DialogTitle>{editingCase ? '编辑病例' : '创建新病例'}</DialogTitle>
+                    <DialogDescription>{editingCase ? '修改病例信息及AISP数字人配置' : '创建病例并配置AISP数字人'}</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -712,18 +766,11 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                     </div>
 
                     <Button
-                      onClick={handleCreateCase}
+                      onClick={handleCreateOrUpdateCase}
                       className="w-full"
                     >
-                      创建病例
+                      {editingCase ? '保存修改' : '创建病例'}
                     </Button>
-                    {showToast && (
-                      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
-                        <div className="bg-red-500 text-white px-4 py-2 rounded shadow-lg text-sm animate-in fade-in slide-in-from-top-2">
-                          必填项为空
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </DialogContent>
               </Dialog>
@@ -758,7 +805,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
                             {caseItem.difficulty === 'easy' ? '简单' :
                              caseItem.difficulty === 'medium' ? '中等' : '困难'}
                           </Badge>
-                          <Button variant="ghost" size="sm">
+                          <Button variant="ghost" size="sm" onClick={() => handleOpenEditCaseDialog(caseItem)}>
                             <Pencil className="w-4 h-4" />
                           </Button>
                           <Button
@@ -1086,6 +1133,16 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* 全局 Toast 提示 */}
+        {showToast && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+            <div className="bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl text-base font-medium animate-in fade-in zoom-in-95 flex items-center justify-center pointer-events-auto">
+              <XCircle className="w-5 h-5 mr-2" />
+              必填项没填
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

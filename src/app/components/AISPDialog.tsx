@@ -29,7 +29,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { Badge } from "@/app/components/ui/badge";
 import { Switch } from "@/app/components/ui/switch";
 import { Label } from "@/app/components/ui/label";
-import { apiClient, SessionScoreResponse } from "@/app/services/api";
+import { toast } from "sonner";
+import { apiClientInstance as apiClient, SessionScoreResponse } from "@/app/services/api";
 
 interface AISPDialogProps {
   caseItem: CaseItem;
@@ -221,6 +222,7 @@ export function AISPDialog({
     overrideType?: "text" | "audio",
     content?: string,
     audioUrl?: string,
+    audioDuration?: number,
   ) => {
     const messageContent = content || input;
     if (!messageContent.trim() && !audioUrl) return;
@@ -236,8 +238,8 @@ export function AISPDialog({
       audioUrl: audioUrl,
       duration:
         messageType === "audio"
-          ? Math.max(1, Math.floor(messageContent.length / 3))
-          : undefined, // 估算时长
+          ? audioDuration || Math.max(1, Math.floor(messageContent.length / 3))
+          : undefined, // 如果没有提供时长，则估算
       timestamp: new Date(),
     };
 
@@ -365,9 +367,20 @@ export function AISPDialog({
   };
 
   const isUserStoppedRef = useRef(false);
+  const isRecordingRef = useRef(false);
+  const isRecognitionFailedRef = useRef(false);
+  const recordingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recordingStartTimeRef = useRef<number>(0);
 
   const handleVoiceInput = async () => {
+    // 停止正在播放的语音
+    window.speechSynthesis.cancel();
+    document.querySelectorAll("audio").forEach((a) => a.pause());
+    setPlayingAudioId(null);
+
     isUserStoppedRef.current = false;
+    isRecordingRef.current = true;
+    isRecognitionFailedRef.current = false;
     if (isRecording) return;
 
     // 1. 启动 MediaRecorder
@@ -376,6 +389,7 @@ export function AISPDialog({
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      recordingStartTimeRef.current = Date.now();
 
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -387,8 +401,19 @@ export function AISPDialog({
     } catch (e) {
       console.error("Failed to start media recorder", e);
       alert("无法访问麦克风，请检查权限。");
+      isRecordingRef.current = false;
       return;
     }
+
+    // 设置最长录音时间 1 分钟
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+    }
+    recordingTimeoutRef.current = setTimeout(() => {
+      if (isRecordingRef.current) {
+        toggleRecording();
+      }
+    }, 60000);
 
     // 2. 启动 SpeechRecognition (用于文字转写)
     const SpeechRecognition =
@@ -403,94 +428,134 @@ export function AISPDialog({
 
       recognition.onstart = () => {
         setIsRecording(true);
+        isRecordingRef.current = true;
         setInput("");
       };
 
+      // 3. 处理语音转写
       recognition.onresult = (event: any) => {
-        let finalTranscript = "";
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setInput((prev) => prev + finalTranscript);
+        const transcript = Array.from(event.results)
+          .map((result: any) => result[0].transcript)
+          .join("");
+        
+        if (event.results[0].isFinal) {
+          setInput(transcript);
         }
       };
 
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error", event.error);
-        if (event.error !== "no-speech" && !isUserStoppedRef.current) {
-          // 尝试重启
-          try {
-            setTimeout(() => {
-              if (!isUserStoppedRef.current) recognition.start();
-            }, 100);
-          } catch (e) {}
+        if (event.error === 'no-speech') {
+          // 如果是未检测到语音，保持录音状态以便重启
+          return;
         }
+        if (event.error === 'network') {
+          // 网络错误，标记失败但不停止录音（降级为仅录音模式）
+          isRecognitionFailedRef.current = true;
+          toast.error("语音识别服务连接失败，将仅录制音频");
+          return;
+        }
+        // 其他错误（如 not-allowed 等）停止录音
+        setIsRecording(false);
+        isRecordingRef.current = false;
+        setPlayingAudioId(null);
       };
 
       recognition.onend = () => {
-        if (isUserStoppedRef.current) {
-          setIsRecording(false);
-          recognitionRef.current = null;
-        } else {
+        // 如果识别服务已失败，不再尝试重启，但保持录音状态
+        if (isRecognitionFailedRef.current) {
+          return;
+        }
+
+        // 如果还在录音状态（非用户主动停止且无致命错误），则重新开始识别
+        // 使用 ref 来判断状态，避免闭包导致的旧状态
+        if (isRecordingRef.current && !isUserStoppedRef.current) {
           try {
             recognition.start();
           } catch (e) {
+            console.error("Failed to restart recognition", e);
             setIsRecording(false);
+            isRecordingRef.current = false;
           }
+        } else {
+          setIsRecording(false);
+          isRecordingRef.current = false;
         }
       };
 
-      recognitionRef.current = recognition;
       try {
         recognition.start();
+        recognitionRef.current = recognition;
+        setIsRecording(true);
+        isRecordingRef.current = true;
       } catch (e) {
-        console.error("Failed to start recognition", e);
+        // 忽略已开始的错误
+        if (e instanceof DOMException && e.name === 'InvalidStateError') {
+          console.warn('Recognition already started');
+          setIsRecording(true);
+          isRecordingRef.current = true;
+        } else {
+          console.error("Failed to start recognition", e);
+          setIsRecording(false);
+          isRecordingRef.current = false;
+        }
       }
     } else {
-      // 如果不支持识别，至少支持录音
+      // 仅录音模式（不支持转写）
       setIsRecording(true);
+      isRecordingRef.current = true;
     }
   };
 
   const toggleRecording = () => {
-    if (isRecording) {
+    // 清除超时计时器
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+
+    // 使用 ref 或 state 都可以，这里主要确保逻辑一致
+    if (isRecording || isRecordingRef.current) {
       isUserStoppedRef.current = true;
-
-      // 停止 SpeechRecognition
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
-      }
-
-      // 停止 MediaRecorder 并生成音频文件
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
-      ) {
+      isRecordingRef.current = false;
+      
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
+        // 处理录音文件
         mediaRecorderRef.current.onstop = () => {
           const audioBlob = new Blob(audioChunksRef.current, {
             type: "audio/webm",
           });
           const audioUrl = URL.createObjectURL(audioBlob);
+          
+          // 计算录音时长（秒）
+          const duration = Math.max(1, Math.floor((Date.now() - recordingStartTimeRef.current) / 1000));
 
-          // 延迟一点发送，确保 input (识别结果) 尽可能完整
-          setTimeout(() => {
-            // 如果没有识别出文字，给一个默认提示，或者就发纯语音
-            const content = input.trim() || "[语音消息]";
-            handleSend("audio", content, audioUrl);
-
-            // 停止所有轨道
-            mediaRecorderRef.current?.stream
-              .getTracks()
-              .forEach((track) => track.stop());
-          }, 200);
+          // 如果有转写的文字，直接发送
+          if (input.trim()) {
+            handleSend("audio", input, audioUrl, duration);
+          } else {
+            // 如果没有文字（转写失败或不支持），仅发送音频
+            // 注意：实际项目中可能需要后端支持语音转文字
+            handleSend("audio", "语音消息", audioUrl, duration);
+          }
+          
+          // 清理
+          mediaRecorderRef.current = null;
+          audioChunksRef.current = [];
         };
-      } else {
-        setIsRecording(false);
       }
+
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch (e) {
+          console.error("Failed to stop recognition", e);
+        }
+        recognitionRef.current = null;
+      }
+      
+      setIsRecording(false);
     } else {
       handleVoiceInput();
     }
@@ -1013,14 +1078,22 @@ export function AISPDialog({
                         : "bg-white hover:bg-gray-50 text-gray-900 border-gray-200"
                     }`}
                     variant="outline"
-                    onMouseDown={handleVoiceInput}
-                    onMouseUp={toggleRecording}
-                    onTouchStart={handleVoiceInput}
-                    onTouchEnd={toggleRecording}
-                    // 保留点击切换作为备选，防止长按事件兼容性问题
                     onClick={isRecording ? toggleRecording : handleVoiceInput}
                   >
-                    {isRecording ? "松开 结束" : "按住 说话"}
+                    {isRecording ? (
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                        </span>
+                        正在录音... 点击结束
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Mic className="w-4 h-4" />
+                        点击说话
+                      </div>
+                    )}
                   </Button>
                 )}
               </div>

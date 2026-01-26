@@ -1,63 +1,70 @@
-#!/usr/bin/env python
-"""创建测试用户"""
+import sys
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from app.models.database import User
-from app.utils.auth import get_password_hash
+from pathlib import Path
 
-DATABASE_URL = "postgresql+asyncpg://postgres:123456@localhost:5432/aimed"
+# 添加项目根目录到路径
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from app.db.session import AsyncSessionLocal
+from app.models.database import User, UserRole
+from app.utils.auth import get_password_hash
+from sqlalchemy import select
 
 async def create_users():
-    engine = create_async_engine(DATABASE_URL, echo=False)
-    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-
-    async with async_session() as session:
-        # 检查用户是否存在
-        from sqlalchemy import select
+    print("开始创建/更新测试用户...")
+    async with AsyncSessionLocal() as db:
+        password = "123456"
+        hashed_password = get_password_hash(password)
         
-        users_to_create = [
+        users_data = [
             {
-                "username": "student1",
-                "email": "student1@example.com",
-                "role": "student",
-                "password": "password123"
+                "username": "student", 
+                "role": UserRole.STUDENT, 
+                "full_name": "测试学生",
+                "email": "student@test.com"
             },
             {
-                "username": "teacher1", 
-                "email": "teacher1@example.com",
-                "role": "teacher",
-                "password": "password123"
+                "username": "teacher", 
+                "role": UserRole.TEACHER, 
+                "full_name": "测试教师",
+                "email": "teacher@test.com"
             },
             {
-                "username": "admin",
-                "email": "admin@example.com",
-                "role": "admin",
-                "password": "admin123"
-            }
+                "username": "admin", 
+                "role": UserRole.ADMIN, 
+                "full_name": "系统管理员",
+                "email": "admin@test.com"
+            },
         ]
-        
-        for user_data in users_to_create:
-            result = await session.execute(
-                select(User).where(User.username == user_data["username"])
-            )
-            existing = result.scalar_one_or_none()
+
+        for u_data in users_data:
+            result = await db.execute(select(User).where(User.username == u_data["username"]))
+            user = result.scalar_one_or_none()
             
-            if not existing:
-                user = User(
-                    username=user_data["username"],
-                    hashed_password=get_password_hash(user_data["password"]),
-                    email=user_data["email"],
-                    role=user_data["role"],
-                    is_active=True
-                )
-                session.add(user)
-                print(f"✓ 创建用户: {user_data['username']}")
+            if user:
+                print(f"用户 {u_data['username']} 已存在，更新密码和角色...")
+                user.hashed_password = hashed_password
+                user.role = u_data["role"]
+                # 如果需要也可以更新其他字段
             else:
-                print(f"- 用户已存在: {user_data['username']}")
+                print(f"创建用户 {u_data['username']}...")
+                user = User(
+                    username=u_data["username"],
+                    email=u_data["email"],
+                    full_name=u_data["full_name"],
+                    role=u_data["role"],
+                    hashed_password=hashed_password,
+                    is_active=1
+                )
+                db.add(user)
         
-        await session.commit()
-        print("\n测试用户创建完成！")
+        await db.commit()
+        print("="*50)
+        print("所有测试用户已处理完毕！")
+        print("用户列表:")
+        for u in users_data:
+            print(f"- 用户名: {u['username']}, 角色: {u['role'].value}, 密码: {password}")
+        print("="*50)
 
 if __name__ == "__main__":
     asyncio.run(create_users())

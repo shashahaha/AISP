@@ -4,7 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://10.21.1.5:8000',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -109,10 +109,14 @@ export interface SessionScoreResponse {
 // 认证接口
 export const authAPI = {
   login: async (username: string, password: string) => {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-    const response = await apiClient.post('/api/auth/login', formData);
+    const params = new URLSearchParams();
+    params.append('username', username);
+    params.append('password', password);
+    const response = await apiClient.post('/api/auth/login', params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
     return response.data;
   },
 
