@@ -34,6 +34,10 @@ from sqlalchemy.orm import Session
 
 def create_database_if_not_exists():
     """创建数据库（如果不存在）"""
+    if "sqlite" in settings.DATABASE_URL_SYNC:
+        print("[OK] SQLite模式，跳过数据库创建步骤")
+        return
+
     from sqlalchemy import text
 
     # 连接到postgres默认数据库

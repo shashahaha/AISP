@@ -26,10 +26,21 @@ import {
   Link,
   CheckCircle,
   XCircle,
-  ExternalLink
+  ExternalLink,
+  Eye
 } from 'lucide-react';
 import { Slider } from '@/app/components/ui/slider';
 import { AISPConfigPanel } from '@/app/components/AISPConfigPanel';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/app/components/ui/alert-dialog";
 
 interface AdminDashboardProps {
   user: User;
@@ -87,45 +98,54 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
   const [sourceDescription, setSourceDescription] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceStatus, setSourceStatus] = useState<'active' | 'inactive'>('active');
+  const [viewingSource, setViewingSource] = useState<KnowledgeSource | null>(null);
+  
+  // 删除确认弹窗相关
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ type: 'user' | 'case' | 'source', id: string } | null>(null);
+  
+  // 提示信息相关
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
-  const handleCreateUser = () => {
-    if (!userName || !userUsername || !userPassword || !userEmail) return;
-
-    const newUser: User = {
-      id: `user${users.length + 1}`,
-      username: userUsername,
-      password: userPassword,
-      role: userRole,
-      name: userName,
-      email: userEmail,
-      department: userDepartment,
-      studentId: userRole === 'student' ? `S${Date.now()}` : undefined,
-      teacherId: userRole === 'teacher' ? `T${Date.now()}` : undefined,
-    };
-
-    setUsers([...users, newUser]);
-    resetUserForm();
+  const showToastMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleUpdateUser = () => {
-    if (!editingUser || !userName || !userUsername || !userPassword || !userEmail) return;
+  const handleSaveUser = () => {
+    if (!userName || !userUsername || !userPassword || !userEmail) {
+      showToastMessage('必填项没填');
+      return;
+    }
 
-    const updatedUsers = users.map(u => {
-      if (u.id === editingUser.id) {
-        return {
-          ...u,
-          name: userName,
-          username: userUsername,
-          password: userPassword,
-          email: userEmail,
-          role: userRole,
-          department: userDepartment,
-        };
-      }
-      return u;
-    });
-
-    setUsers(updatedUsers);
+    if (editingUser) {
+      setUsers(users.map(u => u.id === editingUser.id ? {
+        ...u,
+        username: userUsername,
+        password: userPassword,
+        role: userRole,
+        name: userName,
+        email: userEmail,
+        department: userDepartment,
+        studentId: userRole === 'student' ? (u.studentId || `S${Date.now()}`) : undefined,
+        teacherId: userRole === 'teacher' ? (u.teacherId || `T${Date.now()}`) : undefined,
+      } : u));
+    } else {
+      const newUser: User = {
+        id: `user${users.length + 1}`,
+        username: userUsername,
+        password: userPassword,
+        role: userRole,
+        name: userName,
+        email: userEmail,
+        department: userDepartment,
+        studentId: userRole === 'student' ? `S${Date.now()}` : undefined,
+        teacherId: userRole === 'teacher' ? `T${Date.now()}` : undefined,
+      };
+      setUsers([...users, newUser]);
+    }
     resetUserForm();
   };
 
@@ -140,8 +160,20 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setShowUserDialog(true);
   };
 
+  const handleAddUser = () => {
+    setEditingUser(null);
+    setUserName('');
+    setUserUsername('');
+    setUserPassword('');
+    setUserEmail('');
+    setUserRole('student');
+    setUserDepartment('');
+    setShowUserDialog(true);
+  };
+
   const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter(u => u.id !== userId));
+    setDeleteTarget({ type: 'user', id: userId });
+    setShowDeleteDialog(true);
   };
 
   const resetUserForm = () => {
@@ -155,35 +187,63 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setUserDepartment('');
   };
 
-  const handleCreateCase = () => {
-    if (!caseName || !caseDepartment || !caseDisease || !aispName) return;
+  const handleSaveCase = () => {
+    if (!caseName || !caseDepartment || !caseDisease || !aispName || !aispAvatar) {
+      showToastMessage('必填项没填');
+      return;
+    }
 
-    const newCase: CaseItem = {
-      id: `case${cases.length + 1}`,
-      name: caseName,
-      department: caseDepartment,
-      disease: caseDisease,
-      population: casePopulation,
-      difficulty: caseDifficulty,
-      description: caseDescription,
-      symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
-      diagnosis: caseDiagnosis,
-      treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
-      aisp: {
-        avatar: aispAvatar,
-        name: aispName,
-        age: parseInt(aispAge) || 30,
-        gender: aispGender,
-        personality: aispPersonality,
-        digitalHumanUrl: aispDigitalHumanUrl || undefined,
-        voiceProfile: aispVoiceProfile || undefined,
-      },
-      status: 'approved',
-      createdAt: new Date(),
-      approvedAt: new Date(),
-    };
+    if (editingCase) {
+      setCases(cases.map(c => c.id === editingCase.id ? {
+        ...c,
+        name: caseName,
+        department: caseDepartment,
+        disease: caseDisease,
+        population: casePopulation,
+        difficulty: caseDifficulty,
+        description: caseDescription,
+        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+        diagnosis: caseDiagnosis,
+        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
+        aisp: {
+          ...c.aisp,
+          avatar: aispAvatar,
+          name: aispName,
+          age: parseInt(aispAge) || 30,
+          gender: aispGender,
+          personality: aispPersonality,
+          digitalHumanUrl: aispDigitalHumanUrl || undefined,
+          voiceProfile: aispVoiceProfile || undefined,
+        }
+      } : c));
+    } else {
+      const newCase: CaseItem = {
+        id: `case${cases.length + 1}`,
+        name: caseName,
+        department: caseDepartment,
+        disease: caseDisease,
+        population: casePopulation,
+        difficulty: caseDifficulty,
+        description: caseDescription,
+        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+        diagnosis: caseDiagnosis,
+        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
+        aisp: {
+          avatar: aispAvatar,
+          name: aispName,
+          age: parseInt(aispAge) || 30,
+          gender: aispGender,
+          personality: aispPersonality,
+          digitalHumanUrl: aispDigitalHumanUrl || undefined,
+          voiceProfile: aispVoiceProfile || undefined,
+        },
+        status: 'approved',
+        createdAt: new Date(),
+        approvedAt: new Date(),
+      };
+      setCases([...cases, newCase]);
+    }
 
-    setCases([...cases, newCase]);
     resetCaseForm();
   };
 
@@ -242,9 +302,16 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setAispVoiceProfile(caseItem.aisp.voiceProfile || 'standard');
     setShowCaseDialog(true);
   };
+  
+  const handleAddCase = () => {
+    setEditingCase(null);
+    resetCaseForm();
+    setShowCaseDialog(true);
+  };
 
   const handleDeleteCase = (caseId: string) => {
-    setCases(cases.filter(c => c.id !== caseId));
+    setDeleteTarget({ type: 'case', id: caseId });
+    setShowDeleteDialog(true);
   };
 
   const resetCaseForm = () => {
@@ -262,7 +329,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setAispAge('');
     setAispGender('');
     setAispPersonality('');
-    setAispAvatar('👤');
+    setAispAvatar('');
     setAispDigitalHumanUrl('');
     setAispVoiceProfile('standard');
   };
@@ -340,6 +407,70 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setSourceStatus('active');
   };
 
+  const handleAddSource = () => {
+    setEditingSource(null);
+    setSourceName('');
+    setSourceType('external');
+    setSourceUrl('');
+    setSourceDescription('');
+    setSourceCategory('');
+    setShowSourceDialog(true);
+  };
+
+  const handleDeleteSource = (sourceId: string) => {
+    setDeleteTarget({ type: 'source', id: sourceId });
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!deleteTarget) return;
+
+    switch (deleteTarget.type) {
+      case 'user':
+        setUsers(users.filter(u => u.id !== deleteTarget.id));
+        break;
+      case 'case':
+        setCases(cases.filter(c => c.id !== deleteTarget.id));
+        break;
+      case 'source':
+        setKnowledgeSources(knowledgeSources.filter(s => s.id !== deleteTarget.id));
+        break;
+    }
+    
+    setDeleteTarget(null);
+    setShowDeleteDialog(false);
+  };
+
+  const handleSaveSource = () => {
+    if (!sourceName || !sourceDescription) return;
+
+    if (editingSource) {
+      setKnowledgeSources(knowledgeSources.map(s => s.id === editingSource.id ? {
+        ...s,
+        name: sourceName,
+        type: sourceType,
+        url: sourceUrl || undefined,
+        description: sourceDescription,
+        category: sourceCategory,
+      } : s));
+    } else {
+      const newSource: KnowledgeSource = {
+        id: `ks${knowledgeSources.length + 1}`,
+        name: sourceName,
+        type: sourceType,
+        url: sourceUrl || undefined,
+        description: sourceDescription,
+        category: sourceCategory,
+        status: 'active',
+        caseCount: 0,
+        lastSync: new Date(),
+      };
+      setKnowledgeSources([...knowledgeSources, newSource]);
+    }
+    setShowSourceDialog(false);
+  };
+
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
   return (
@@ -391,23 +522,14 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                 <p className="text-gray-500">管理系统用户和权限</p>
               </div>
               <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-                <Button onClick={() => {
-                  setEditingUser(null);
-                  setUserName('');
-                  setUserUsername('');
-                  setUserPassword('');
-                  setUserEmail('');
-                  setUserRole('student');
-                  setUserDepartment('');
-                  setShowUserDialog(true);
-                }}>
+                <Button onClick={handleAddUser}>
                   <Plus className="w-4 h-4 mr-2" />
                   添加用户
                 </Button>
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>{editingUser ? '编辑用户' : '添加新用户'}</DialogTitle>
-                    <DialogDescription>{editingUser ? '修改用户信息和权限' : '创建新的系统用户并分配角色权限'}</DialogDescription>
+                    <DialogDescription>创建新的系统用户并分配角色权限</DialogDescription>
                   </DialogHeader>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -466,7 +588,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                       />
                     </div>
                   </div>
-                  <Button onClick={editingUser ? handleUpdateUser : handleCreateUser} className="w-full">
+                  <Button onClick={handleSaveUser} className="w-full relative">
                     {editingUser ? '保存修改' : '创建用户'}
                   </Button>
                 </DialogContent>
@@ -487,7 +609,15 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {users.map((user) => (
+                    {[...users]
+                      .reverse() // 首先反转，实现新添加的用户在前面
+                      .sort((a, b) => {
+                        // 排序逻辑：管理员排在最后
+                        if (a.role === 'admin' && b.role !== 'admin') return 1;
+                        if (a.role !== 'admin' && b.role === 'admin') return -1;
+                        return 0; // 同类角色保持原有顺序（即反转后的时间倒序）
+                      })
+                      .map((user) => (
                       <TableRow key={user.id}>
                         <TableCell>{user.name}</TableCell>
                         <TableCell>{user.username}</TableCell>
@@ -506,17 +636,22 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <TableCell>{user.department || '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditUser(user)}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleEditUser(user)}
+                            >
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id)}
-                              disabled={user.id === '4'}
-                            >
-                              <Trash2 className="w-4 h-4 text-red-500" />
-                            </Button>
+                            {user.role !== 'admin' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteUser(user.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -536,25 +671,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
               </div>
               <Dialog open={showCaseDialog} onOpenChange={setShowCaseDialog}>
                 <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingCase(null);
-                    setCaseName('');
-                    setCaseDepartment('');
-                    setCaseDisease('');
-                    setCasePopulation('');
-                    setCaseDifficulty('medium');
-                    setCaseDescription('');
-                    setCaseSymptoms('');
-                    setCaseDiagnosis('');
-                    setCaseTreatment('');
-                    setAispName('');
-                    setAispAge('');
-                    setAispGender('');
-                    setAispPersonality('');
-                    setAispAvatar('👤');
-                    setAispDigitalHumanUrl('');
-                    setAispVoiceProfile('standard');
-                  }}>
+                  <Button onClick={handleAddCase}>
                     <Plus className="w-4 h-4 mr-2" />
                     添加病例
                   </Button>
@@ -562,7 +679,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                 <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingCase ? '编辑病例' : '添加新病例'}</DialogTitle>
-                    <DialogDescription>{editingCase ? '修改病例信息和AISP数字人配置' : '创建新的病例并配置AISP数字人'}</DialogDescription>
+                    <DialogDescription>创建新的病例并配置AISP数字人</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
@@ -661,7 +778,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                         <div className="space-y-2">
                           <Label>患者姓名 *</Label>
                           <Input
-                            placeholder="输���患者姓名"
+                            placeholder="输入患者姓名"
                             value={aispName}
                             onChange={(e) => setAispName(e.target.value)}
                           />
@@ -688,10 +805,10 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>形象</Label>
+                          <Label>形象 *</Label>
                           <Select value={aispAvatar} onValueChange={setAispAvatar}>
                             <SelectTrigger>
-                              <SelectValue />
+                              <SelectValue placeholder="选择形象" />
                             </SelectTrigger>
                             <SelectContent>
                               {avatarOptions.map((emoji) => (
@@ -736,7 +853,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                       </div>
                     </div>
 
-                    <Button onClick={editingCase ? handleUpdateCase : handleCreateCase} className="w-full">
+                    <Button onClick={handleSaveCase} className="w-full relative">
                       {editingCase ? '保存修改' : '创建病例'}
                     </Button>
                   </div>
@@ -762,7 +879,11 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                           {caseItem.difficulty === 'easy' ? '简单' :
                            caseItem.difficulty === 'medium' ? '中等' : '困难'}
                         </Badge>
-                        <Button variant="ghost" size="sm" onClick={() => handleEditCase(caseItem)}>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEditCase(caseItem)}
+                        >
                           <Pencil className="w-4 h-4" />
                         </Button>
                         <Button
@@ -907,22 +1028,28 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
           {/* 知识库管理 */}
           <TabsContent value="knowledge" className="space-y-6">
             <Tabs defaultValue="sources" className="space-y-6">
-              <TabsList className="w-full justify-start border-b rounded-none bg-transparent p-0 h-auto">
-                <TabsTrigger 
-                  value="sources"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2"
-                >
-                  <Database className="w-4 h-4 mr-2" />
-                  数据源管理
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="graph"
-                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 py-2"
-                >
-                  <Network className="w-4 h-4 mr-2" />
-                  知识图谱
-                </TabsTrigger>
-              </TabsList>
+              <div className="border-b">
+                <TabsList className="h-auto p-0 bg-transparent space-x-6 rounded-none border-b-0">
+                  <TabsTrigger 
+                     value="sources"
+                     className="relative rounded-none border-b-2 border-transparent px-6 py-3 font-medium text-muted-foreground shadow-none bg-transparent hover:text-foreground transition-all data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                   >
+                     <div className="flex items-center gap-2">
+                       <Database className="w-4 h-4" />
+                       <span>数据源管理</span>
+                     </div>
+                   </TabsTrigger>
+                   <TabsTrigger 
+                     value="graph"
+                     className="relative rounded-none border-b-2 border-transparent px-6 py-3 font-medium text-muted-foreground shadow-none bg-transparent hover:text-foreground transition-all data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                   >
+                     <div className="flex items-center gap-2">
+                       <Network className="w-4 h-4" />
+                       <span>知识图谱</span>
+                     </div>
+                   </TabsTrigger>
+                </TabsList>
+              </div>
 
               {/* 数据源管理 */}
               <TabsContent value="sources" className="space-y-4">
@@ -932,21 +1059,16 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     <p className="text-sm text-gray-600">连接和管理医学知识库</p>
                   </div>
                   <Dialog open={showSourceDialog} onOpenChange={setShowSourceDialog}>
-                    <Button onClick={() => {
-                      resetSourceForm();
-                      setShowSourceDialog(true);
-                    }}>
+                    <Button onClick={handleAddSource}>
                       <Plus className="w-4 h-4 mr-2" />
                       添加数据源
                     </Button>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>{editingSource ? '编辑数据源' : '添加数据源'}</DialogTitle>
-                        <DialogDescription>
-                          {editingSource ? '修改数据源信息' : '添加新的医学知识库数据源'}
-                        </DialogDescription>
+                        <DialogDescription>配置知识库数据来源</DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label>名称 *</Label>
                           <Input
@@ -955,60 +1077,143 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                             onChange={(e) => setSourceName(e.target.value)}
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label>类型</Label>
-                            <Select value={sourceType} onValueChange={(v: any) => setSourceType(v)}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="internal">内部知识库</SelectItem>
-                                <SelectItem value="external">外部接口</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>分类 *</Label>
-                            <Input
-                              placeholder="例如：指南、文献"
-                              value={sourceCategory}
-                              onChange={(e) => setSourceCategory(e.target.value)}
-                            />
-                          </div>
-                        </div>
                         <div className="space-y-2">
-                          <Label>描述</Label>
-                          <Textarea
-                            placeholder="输入数据源描述"
-                            value={sourceDescription}
-                            onChange={(e) => setSourceDescription(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>URL (可选)</Label>
-                          <Input
-                            placeholder="输入数据源链接"
-                            value={sourceUrl}
-                            onChange={(e) => setSourceUrl(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>状态</Label>
-                          <Select value={sourceStatus} onValueChange={(v: any) => setSourceStatus(v)}>
+                          <Label>类型 *</Label>
+                          <Select 
+                            value={sourceType} 
+                            onValueChange={(v: any) => setSourceType(v)}
+                            disabled={!!editingSource && editingSource.type === 'internal'}
+                          >
                             <SelectTrigger>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="active">激活</SelectItem>
-                              <SelectItem value="inactive">未激活</SelectItem>
+                              {(!editingSource || editingSource.type === 'external') && (
+                                <SelectItem value="external">外部数据库</SelectItem>
+                              )}
+                              {editingSource?.type === 'internal' && (
+                                <SelectItem value="internal">内部知识库</SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
-                        <Button onClick={editingSource ? handleUpdateSource : handleCreateSource} className="w-full">
-                          {editingSource ? '保存修改' : '创建数据源'}
-                        </Button>
+                        <div className="space-y-2">
+                          <Label>分类</Label>
+                          <Input
+                            placeholder="例如：综合医学、儿科"
+                            value={sourceCategory}
+                            onChange={(e) => setSourceCategory(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>URL (外部数据源)</Label>
+                          <Input
+                            placeholder="https://..."
+                            value={sourceUrl}
+                            onChange={(e) => setSourceUrl(e.target.value)}
+                            disabled={sourceType === 'internal'}
+                          />
+                        </div>
+                        <div className="col-span-2 space-y-2">
+                          <Label>描述 *</Label>
+                          <Textarea
+                            placeholder="输入数据源描述"
+                            value={sourceDescription}
+                            onChange={(e) => setSourceDescription(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
                       </div>
+                      <Button onClick={handleSaveSource} className="w-full">
+                        {editingSource ? '保存修改' : '添加数据源'}
+                      </Button>
+                    </DialogContent>
+                  </Dialog>
+                  
+                  {/* 查看数据源详情 Dialog */}
+                  <Dialog open={!!viewingSource} onOpenChange={(open) => !open && setViewingSource(null)}>
+                    <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>{viewingSource?.name} - 详情</DialogTitle>
+                        <DialogDescription>{viewingSource?.description}</DialogDescription>
+                      </DialogHeader>
+                      
+                      {viewingSource?.type === 'internal' && (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                              内部病例库
+                            </Badge>
+                            <span className="text-sm text-gray-500">共 {cases.length} 个病例</span>
+                          </div>
+                          
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>病例名称</TableHead>
+                                <TableHead>科室</TableHead>
+                                <TableHead>疾病</TableHead>
+                                <TableHead>人群</TableHead>
+                                <TableHead>难度</TableHead>
+                                <TableHead>状态</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {cases.map((caseItem) => (
+                                <TableRow key={caseItem.id}>
+                                  <TableCell className="font-medium">{caseItem.name}</TableCell>
+                                  <TableCell>{caseItem.department}</TableCell>
+                                  <TableCell>{caseItem.disease}</TableCell>
+                                  <TableCell>{caseItem.population}</TableCell>
+                                  <TableCell>
+                                    <Badge className={
+                                      caseItem.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                      caseItem.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                    }>
+                                      {caseItem.difficulty === 'easy' ? '简单' :
+                                       caseItem.difficulty === 'medium' ? '中等' : '困难'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                      已批准
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+
+                      {viewingSource?.type === 'external' && (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-gray-50 rounded-lg border">
+                            <h4 className="font-medium mb-2">连接信息</h4>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-500">URL:</span>
+                                <a href={viewingSource.url} target="_blank" rel="noopener noreferrer" className="ml-2 text-blue-600 hover:underline">
+                                  {viewingSource.url}
+                                </a>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">状态:</span>
+                                <span className="ml-2">{viewingSource.status === 'active' ? '活跃' : '未激活'}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">最后同步:</span>
+                                <span className="ml-2">{viewingSource.lastSync?.toLocaleDateString()}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500">包含病例数:</span>
+                                <span className="ml-2">{viewingSource.caseCount}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </DialogContent>
                   </Dialog>
                 </div>
@@ -1047,20 +1252,20 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                                 </Badge>
                               </div>
                               <p className="text-sm text-gray-600 mb-3">{source.description}</p>
-                              <div className="flex items-center gap-4 text-sm text-gray-500">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
                                 <div className="flex items-center gap-1">
-                                  <FileText className="w-4 h-4" />
+                                  <FileText className="w-3 h-3" />
                                   <span>{source.caseCount.toLocaleString()} 个病例</span>
                                 </div>
                                 {source.url && (
-                                  <div className="flex items-center gap-1">
-                                    <Link className="w-4 h-4" />
-                                    <span className="truncate max-w-xs">{source.url}</span>
+                                  <div className="flex items-center gap-1 min-w-0">
+                                    <Link className="w-3 h-3 shrink-0" />
+                                    <span className="truncate max-w-[200px]">{source.url}</span>
                                   </div>
                                 )}
                                 {source.lastSync && (
                                   <div className="flex items-center gap-1">
-                                    <RefreshCw className="w-4 h-4" />
+                                    <RefreshCw className="w-3 h-3" />
                                     <span>最后同步: {source.lastSync.toLocaleDateString('zh-CN')}</span>
                                   </div>
                                 )}
@@ -1068,15 +1273,37 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {source.type === 'internal' && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => setViewingSource(source)}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                            )}
                             {source.type === 'external' && source.status === 'active' && (
                               <Button size="sm" variant="outline">
                                 <RefreshCw className="w-4 h-4 mr-1" />
                                 同步
                               </Button>
                             )}
-                            <Button variant="ghost" size="sm" onClick={() => handleEditSource(source)}>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => handleEditSource(source)}
+                            >
                               <Pencil className="w-4 h-4" />
                             </Button>
+                            {source.type === 'external' && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteSource(source.id)}
+                              >
+                                <Trash2 className="w-4 h-4 text-red-500" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -1142,6 +1369,37 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
             </Tabs>
           </TabsContent>
         </Tabs>
+
+        {/* 删除确认弹窗 - 放在最外层以确保所有Tab都能访问 */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认删除？</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget?.type === 'user' && '此操作将永久删除该用户及其相关数据。'}
+                {deleteTarget?.type === 'case' && '此操作将永久删除该病例及其相关数据。'}
+                {deleteTarget?.type === 'source' && '此操作将永久删除该数据源及其相关配置。'}
+                此操作无法撤销。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setDeleteTarget(null)}>取消</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDelete} className="bg-red-600 hover:bg-red-700">
+                确认删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* 全局 Toast 提示 - 放在最外层以确保显示在所有层级之上 */}
+        {showToast && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
+            <div className="bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl text-base font-medium animate-in fade-in zoom-in-95 flex items-center justify-center pointer-events-auto">
+              <XCircle className="w-5 h-5 mr-2" />
+              {toastMessage || '必填项没填'}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
