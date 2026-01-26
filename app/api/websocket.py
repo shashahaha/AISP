@@ -1,4 +1,5 @@
-from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Depends
+from fastapi import WebSocket, WebSocketDisconnect, APIRouter, Depends, Query
+from fastapi.security.utils import get_authorization_scheme_param
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Dict, Optional
 import json
@@ -6,6 +7,8 @@ import asyncio
 from app.core.chat_engine import get_chat_engine
 from app.services.session_service import SessionService
 from app.db.session import AsyncSessionLocal
+from app.models.database import User
+from app.utils.auth import decode_token
 
 router = APIRouter()
 
@@ -51,12 +54,45 @@ async def get_db():
             raise
 
 
+async def get_websocket_user(websocket: WebSocket) -> Optional[User]:
+    """从WebSocket连接中获取认证用户"""
+    # 从查询参数获取token
+    token = websocket.query_params.get("token")
+
+    if not token:
+        # 尝试从请求头获取
+        headers = dict(websocket.headers)
+        auth_header = headers.get("authorization", "")
+        scheme, credentials = get_authorization_scheme_param(auth_header)
+        if scheme.lower() == "bearer":
+            token = credentials
+
+    if not token:
+        await websocket.close(code=4001, reason="未提供认证令牌")
+        return None
+
+    # 解析token
+    payload = decode_token(token)
+    if payload is None:
+        await websocket.close(code=4001, reason="无效的认证令牌")
+        return None
+
+    # 获取用户
+    from sqlalchemy import select
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(User).where(User.id == payload["user_id"])
+        )
+        user = result.scalar_one_or_none()
+        return user
+
+
 @router.websocket("/ws/chat/{session_id}")
 async def websocket_chat_endpoint(websocket: WebSocket, session_id: str):
     """
     WebSocket实时对话接口
 
-    连接URL: ws://localhost:8000/ws/chat/{session_id}
+    连接URL: ws://localhost:8000/ws/chat/{session_id}?token={jwt_token}
 
     消息格式:
     ```json
@@ -68,6 +104,11 @@ async def websocket_chat_endpoint(websocket: WebSocket, session_id: str):
     }
     ```
     """
+    # 验证用户
+    user = await get_websocket_user(websocket)
+    if not user:
+        return
+
     await manager.connect(websocket, session_id)
 
     # 创建数据库会话
@@ -86,11 +127,11 @@ async def websocket_chat_endpoint(websocket: WebSocket, session_id: str):
 
                 elif msg_type == "message":
                     # 处理对话消息
-                    await handle_chat_message(websocket, session_id, message, db)
+                    await handle_chat_message(websocket, session_id, message, db, user)
 
                 elif msg_type == "end":
                     # 结束会话
-                    await handle_end_session(websocket, session_id, message, db)
+                    await handle_end_session(websocket, session_id, message, db, user)
 
                 else:
                     await websocket.send_json({
@@ -112,11 +153,12 @@ async def handle_start_session(
     websocket: WebSocket,
     session_id: str,
     message: dict,
-    db: AsyncSession
+    db: AsyncSession,
+    user: User
 ):
     """处理开始会话"""
     case_id = message.get("case_id", "case_001")
-    user_id = 1  # 临时硬编码
+    user_id = user.id
 
     # 获取会话服务
     session_service = SessionService(db)
@@ -173,7 +215,8 @@ async def handle_chat_message(
     websocket: WebSocket,
     session_id: str,
     message: dict,
-    db: AsyncSession
+    db: AsyncSession,
+    user: User
 ):
     """处理对话消息"""
     session_service = SessionService(db)
@@ -250,7 +293,8 @@ async def handle_end_session(
     websocket: WebSocket,
     session_id: str,
     message: dict,
-    db: AsyncSession
+    db: AsyncSession,
+    user: User
 ):
     """处理结束会话"""
     session_service = SessionService(db)

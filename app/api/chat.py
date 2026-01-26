@@ -8,7 +8,8 @@ from app.core.chat_engine import get_chat_engine
 from app.services.session_service import SessionService
 from app.services.scoring_service import ScoringService
 from app.db.session import get_async_db
-from app.models.database import Case, SessionStatus, ImprovementSuggestion
+from app.models.database import Case, SessionStatus, ImprovementSuggestion, User
+from app.api.auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/api/chat", tags=["对话"])
 
@@ -16,6 +17,7 @@ router = APIRouter(prefix="/api/chat", tags=["对话"])
 @router.post("/start", response_model=Dict[str, Any])
 async def start_chat_session(
     request: ChatRequest,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
@@ -27,8 +29,8 @@ async def start_chat_session(
     # 获取病例数据
     case_data = await _get_case_data(db, request.case_id)
 
-    # 获取用户ID (临时硬编码，应从JWT token获取)
-    user_id = 1
+    # 使用当前用户ID
+    user_id = current_user.id
 
     # 检查是否已有活跃会话
     session_service = SessionService(db)
@@ -320,6 +322,7 @@ async def get_session(
 async def list_sessions(
     status: str = None,
     limit: int = 50,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
@@ -328,8 +331,8 @@ async def list_sessions(
     - **status**: 状态筛选 (active/completed/abandoned)
     - **limit**: 返回数量限制
     """
-    # 临时硬编码用户ID
-    user_id = 1
+    # 使用当前用户ID
+    user_id = current_user.id
 
     session_service = SessionService(db)
 

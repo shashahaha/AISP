@@ -25,6 +25,12 @@ class UserResponse(UserBase):
         from_attributes = True
 
 
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: Optional[Dict[str, Any]] = None
+
+
 # ===== 病例相关 =====
 class PatientInfo(BaseModel):
     age: int

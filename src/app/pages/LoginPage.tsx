@@ -1,52 +1,93 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
-import { User } from '@/app/types';
-import { mockUsers } from '@/app/mockData';
+import { useAuthStore } from '@/app/stores';
+import { authAPI } from '@/app/services/api';
+import { toastUtils } from '@/app/lib/toast';
 
-interface LoginPageProps {
-  onLogin: (user: User) => void;
-}
-
-export function LoginPage({ onLogin }: LoginPageProps) {
+export function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const setAuth = useAuthStore((state) => state.setAuth);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const user = mockUsers.find(
-      (u) => u.username === username && u.password === password
-    );
+    try {
+      const response = await authAPI.login(username, password);
+      const { access_token, user } = response;
 
-    if (user) {
-      onLogin(user);
-    } else {
-      setError('用户名或密码错误');
+      setAuth(user, access_token);
+      toastUtils.success(`欢迎回来，${user.username}！`);
+
+      // 根据角色跳转
+      switch (user.role) {
+        case 'student':
+          navigate('/student');
+          break;
+        case 'teacher':
+          navigate('/teacher');
+          break;
+        case 'admin':
+          navigate('/admin');
+          break;
+        default:
+          navigate('/student');
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || '登录失败，请检查用户名和密码';
+      setError(errorMsg);
+      toastUtils.error(errorMsg);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleQuickLogin = (role: 'student' | 'teacher' | 'admin') => {
+  const handleQuickLogin = async (role: 'student' | 'teacher' | 'admin') => {
     const credentials = {
-      student: { username: 'student1', password: '123456' },
-      teacher: { username: 'teacher1', password: '123456' },
+      student: { username: 'student1', password: 'password123' },
+      teacher: { username: 'teacher1', password: 'password123' },
       admin: { username: 'admin', password: 'admin123' },
     };
 
     const { username: u, password: p } = credentials[role];
     setUsername(u);
     setPassword(p);
-    
-    const user = mockUsers.find(
-      (user) => user.username === u && user.password === p
-    );
 
-    if (user) {
-      onLogin(user);
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await authAPI.login(u, p);
+      const { access_token, user } = response;
+
+      setAuth(user, access_token);
+
+      switch (user.role) {
+        case 'student':
+          navigate('/student');
+          break;
+        case 'teacher':
+          navigate('/teacher');
+          break;
+        case 'admin':
+          navigate('/admin');
+          break;
+        default:
+          navigate('/student');
+      }
+    } catch (err: any) {
+      setError('快速登录失败，请先创建测试用户');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,6 +111,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
@@ -81,21 +123,22 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={loading}
               />
             </div>
             {error && (
               <div className="text-red-500 text-sm text-center">{error}</div>
             )}
-            <Button type="submit" className="w-full">
-              登录
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? '登录中...' : '登录'}
             </Button>
           </form>
 
           <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm">
-            <p className="font-medium mb-2">测试账号：</p>
+            <p className="font-medium mb-2">快速登录：</p>
             <div className="space-y-1 text-gray-600">
-              <p>学生: student1 / 123456</p>
-              <p>教师: teacher1 / 123456</p>
+              <p>学生: student1 / password123</p>
+              <p>教师: teacher1 / password123</p>
               <p>超管: admin / admin123</p>
             </div>
             <div className="mt-3 flex gap-2">
@@ -104,6 +147,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickLogin('student')}
+                disabled={loading}
                 className="flex-1"
               >
                 学生登录
@@ -113,6 +157,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickLogin('teacher')}
+                disabled={loading}
                 className="flex-1"
               >
                 教师登录
@@ -122,6 +167,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => handleQuickLogin('admin')}
+                disabled={loading}
                 className="flex-1"
               >
                 超管登录
