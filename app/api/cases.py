@@ -56,10 +56,8 @@ class CaseResponse(BaseModel):
     differential_diagnosis: Optional[List[str]] = None
     key_questions: Optional[List[str]] = None
     is_active: int
-    created_at: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    # 不返回created_at，避免datetime序列化问题
 
 
 @router.get("", response_model=List[CaseResponse])
