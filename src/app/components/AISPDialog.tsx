@@ -245,6 +245,10 @@ export function AISPDialog({
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+
+    // 等对方说完停顿半秒再反应
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     setIsTyping(true);
 
     // 如果有有效的 sessionId，调用真实后端 API
@@ -256,8 +260,12 @@ export function AISPDialog({
           messageContent,
         );
 
-        setIsAispSpeaking(true);
-        const aiResponseType = isVoiceChatMode ? "audio" : "text";
+        // AI 回复类型跟随用户消息类型：用户发语音则回语音，用户发文字则回文字
+        const aiResponseType = messageType === "audio" ? "audio" : "text";
+
+        if (aiResponseType === "audio") {
+          setIsAispSpeaking(true);
+        }
 
         const aiResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -276,31 +284,38 @@ export function AISPDialog({
 
         if (aiResponseType === "audio") {
           playAudio(response.response, aiResponse.id);
+          
+          // 模拟说话动画持续时间
+          setTimeout(() => {
+            setIsAispSpeaking(false);
+            setAispEmotion("neutral");
+          }, 2000);
         }
-
-        // 模拟说话动画持续时间
-        setTimeout(() => {
-          setIsAispSpeaking(false);
-          setAispEmotion("neutral");
-        }, 2000);
       } catch (error) {
         console.error("Failed to send message:", error);
         // 降级到模拟响应
-        fallbackToMockResponse(messageContent);
+        fallbackToMockResponse(messageContent, messageType);
       }
     } else {
       // 使用模拟响应
-      fallbackToMockResponse(messageContent);
+      fallbackToMockResponse(messageContent, messageType);
     }
   };
 
   // 降级到模拟响应
-  const fallbackToMockResponse = (messageContent: string) => {
+  const fallbackToMockResponse = (
+    messageContent: string,
+    triggerMessageType: "text" | "audio",
+  ) => {
     setTimeout(
       () => {
-        setIsAispSpeaking(true);
         const aiResponseContent = generateAIResponse(messageContent);
-        const aiResponseType = isVoiceChatMode ? "audio" : "text";
+        // AI 回复类型跟随用户消息类型
+        const aiResponseType = triggerMessageType === "audio" ? "audio" : "text";
+
+        if (aiResponseType === "audio") {
+          setIsAispSpeaking(true);
+        }
 
         const aiResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
@@ -319,13 +334,13 @@ export function AISPDialog({
 
         if (aiResponseType === "audio") {
           playAudio(aiResponseContent, aiResponse.id);
+          
+          // 模拟说话动画持续时间
+          setTimeout(() => {
+            setIsAispSpeaking(false);
+            setAispEmotion("neutral");
+          }, 2000);
         }
-
-        // 模拟说话动画持续时间
-        setTimeout(() => {
-          setIsAispSpeaking(false);
-          setAispEmotion("neutral");
-        }, 2000);
       },
       1000 + Math.random() * 1000,
     );
@@ -678,20 +693,7 @@ export function AISPDialog({
           </div>
         </div>
 
-        {/* 语音对话模式开关 */}
-        <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border shadow-sm">
-          <Switch
-            id="voice-mode"
-            checked={isVoiceChatMode}
-            onCheckedChange={setIsVoiceChatMode}
-          />
-          <Label
-            htmlFor="voice-mode"
-            className="text-sm cursor-pointer font-medium text-gray-700"
-          >
-            语音对话模式
-          </Label>
-        </div>
+
 
         <div className="flex items-center gap-3">
           {/* 连接状态指示器 */}
