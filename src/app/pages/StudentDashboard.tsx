@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "@/app/stores";
 import {
   Card,
   CardContent,
@@ -57,10 +59,22 @@ import {
   AudioWaveform,
 } from "lucide-react";
 
+<<<<<<< HEAD
 import { useAuthStore } from "@/app/stores";
 
 export function StudentDashboard() {
   const { user, logout } = useAuthStore();
+=======
+export function StudentDashboard() {
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
+  
+  const handleLogout = () => {
+    clearAuth();
+    navigate("/login");
+  };
+
+>>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const [selectedCase, setSelectedCase] =
     useState<CaseItem | null>(null);
   
@@ -68,7 +82,7 @@ export function StudentDashboard() {
 
   const [evaluations, setEvaluations] = useState<
     EvaluationResult[]
-  >(mockEvaluations.filter((e) => e.studentId === user.id));
+  >(user ? mockEvaluations.filter((e) => e.studentId === user.id) : []);
 
   // 筛选条件
   const [selectedDepartment, setSelectedDepartment] =
@@ -81,9 +95,11 @@ export function StudentDashboard() {
   const [selectedHistoryEvaluation, setSelectedHistoryEvaluation] = useState<EvaluationResult | null>(null);
 
   // 获取学生的课程任务
-  const myCourseTasks = mockCourseTasks.filter((task) =>
+  const myCourseTasks = user ? mockCourseTasks.filter((task) =>
     task.assignedStudents.includes(user.id),
-  );
+  ) : [];
+
+  if (!user) return null;
 
   const handleCaseComplete = (evaluation: EvaluationResult) => {
     setEvaluations([...evaluations, evaluation]);
@@ -263,7 +279,7 @@ export function StudentDashboard() {
           </div>
           <Button
             variant="ghost"
-            onClick={logout}
+            onClick={handleLogout}
             className="gap-2"
           >
             <LogOut className="w-4 h-4" />

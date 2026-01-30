@@ -123,13 +123,3 @@ export interface KnowledgeSource {
   lastSync?: Date;
   category: string;
 }
-
-// 知识图谱节点
-export interface KnowledgeNode {
-  id: string;
-  name: string;
-  type: 'disease' | 'symptom' | 'treatment' | 'department';
-  description: string;
-  relatedNodes: string[];
-  caseCount: number;
-}

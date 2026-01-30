@@ -1,7 +1,5 @@
-#!/usr/bin/env python
-"""创建测试用户"""
-import asyncio
 import sys
+import asyncio
 import os
 from pathlib import Path
 
@@ -13,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from app.models.database import User, UserRole
 from app.utils.auth import get_password_hash
 from app.config import settings
+from sqlalchemy import select
 
 async def create_users():
     engine = create_async_engine(settings.DATABASE_URL, echo=False)
@@ -20,9 +19,9 @@ async def create_users():
 
     async with async_session() as session:
         # 检查用户是否存在
-        from sqlalchemy import select
+        print("开始创建/更新测试用户...")
         
-        users_to_create = [
+        users_data = [
             {
                 "username": "student1",
                 "email": "student1@example.com",
@@ -45,11 +44,9 @@ async def create_users():
                 "full_name": "系统管理员"
             }
         ]
-        
-        for user_data in users_to_create:
-            result = await session.execute(
-                select(User).where(User.username == user_data["username"])
-            )
+
+        for user_data in users_data:
+            result = await session.execute(select(User).where(User.username == user_data["username"]))
             existing = result.scalar_one_or_none()
             
             if not existing:

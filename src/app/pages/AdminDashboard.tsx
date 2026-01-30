@@ -1,4 +1,10 @@
+<<<<<<< HEAD
 import { useState, useEffect } from 'react';
+=======
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '@/app/stores';
+>>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -13,7 +19,6 @@ import { User, CaseItem, ScoringCriteria, KnowledgeSource, KnowledgeNode } from 
 import { mockCases, mockScoringCriteria, mockKnowledgeSources, mockKnowledgeNodes } from '@/app/mockData';
 import { authAPI } from '@/app/services/api';
 import { toastUtils } from '@/app/lib/toast';
-import { useAuthStore } from '@/app/stores';
 import { 
   LogOut, 
   Users, 
@@ -46,7 +51,8 @@ import {
 } from "@/app/components/ui/alert-dialog";
 
 export function AdminDashboard() {
-  const { user, logout } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
 
@@ -54,7 +60,10 @@ export function AdminDashboard() {
     fetchUsers();
   }, []);
 
-  if (!user) return null;
+  const handleLogout = () => {
+    clearAuth();
+    navigate('/login');
+  };
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -67,10 +76,11 @@ export function AdminDashboard() {
       setLoadingUsers(false);
     }
   };
+
+  if (!user) return null;
   const [cases, setCases] = useState<CaseItem[]>(mockCases);
   const [criteria, setCriteria] = useState<ScoringCriteria[]>(mockScoringCriteria);
   const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>(mockKnowledgeSources);
-  const [knowledgeNodes, setKnowledgeNodes] = useState<KnowledgeNode[]>(mockKnowledgeNodes);
 
   // 用户管理相关
   const [showUserDialog, setShowUserDialog] = useState(false);
@@ -113,8 +123,11 @@ export function AdminDashboard() {
   const [sourceName, setSourceName] = useState('');
   const [sourceType, setSourceType] = useState<'internal' | 'external'>('internal');
   const [sourceCategory, setSourceCategory] = useState('');
+<<<<<<< HEAD
   const [sourceDescription, setSourceDescription] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
+=======
+>>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const [sourceStatus, setSourceStatus] = useState<'active' | 'inactive'>('active');
   const [viewingSource, setViewingSource] = useState<KnowledgeSource | null>(null);
   
@@ -430,9 +443,24 @@ export function AdminDashboard() {
     setSourceUrl('');
     setSourceDescription('');
     setSourceCategory('');
+    setSourceStatus('active');
     setShowSourceDialog(true);
   };
 
+<<<<<<< HEAD
+=======
+  const handleEditSource = (source: KnowledgeSource) => {
+    setEditingSource(source);
+    setSourceName(source.name);
+    setSourceType(source.type);
+    setSourceUrl(source.url || '');
+    setSourceDescription(source.description);
+    setSourceCategory(source.category);
+    setSourceStatus(source.status);
+    setShowSourceDialog(true);
+  };
+
+>>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const handleDeleteSource = (sourceId: string) => {
     setDeleteTarget({ type: 'source', id: sourceId });
     setShowDeleteDialog(true);
@@ -465,7 +493,10 @@ export function AdminDashboard() {
   };
 
   const handleSaveSource = () => {
-    if (!sourceName || !sourceDescription) return;
+    if (!sourceName || !sourceDescription) {
+      showToastMessage('必填项没填');
+      return;
+    }
 
     if (editingSource) {
       setKnowledgeSources(knowledgeSources.map(s => s.id === editingSource.id ? {
@@ -475,6 +506,7 @@ export function AdminDashboard() {
         url: sourceUrl || undefined,
         description: sourceDescription,
         category: sourceCategory,
+        status: sourceStatus,
       } : s));
     } else {
       const newSource: KnowledgeSource = {
@@ -484,7 +516,7 @@ export function AdminDashboard() {
         url: sourceUrl || undefined,
         description: sourceDescription,
         category: sourceCategory,
-        status: 'active',
+        status: sourceStatus,
         caseCount: 0,
         lastSync: new Date(),
       };
@@ -495,6 +527,8 @@ export function AdminDashboard() {
 
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
+  if (!user) return null;
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* 顶部导航栏 */}
@@ -504,7 +538,7 @@ export function AdminDashboard() {
             <h1 className="text-xl font-semibold">AISP 教学系统 - 超级管理员</h1>
             <p className="text-sm text-gray-500">欢迎，{user.name}</p>
           </div>
-          <Button variant="ghost" onClick={logout}>
+          <Button variant="ghost" onClick={handleLogout}>
             <LogOut className="w-4 h-4 mr-2" />
             退出登录
           </Button>
@@ -1053,36 +1087,11 @@ export function AdminDashboard() {
 
           {/* 知识库管理 */}
           <TabsContent value="knowledge" className="space-y-6">
-            <Tabs defaultValue="sources" className="space-y-6">
-              <div className="border-b">
-                <TabsList className="h-auto p-0 bg-transparent space-x-6 rounded-none border-b-0">
-                  <TabsTrigger 
-                     value="sources"
-                     className="relative rounded-none border-b-2 border-transparent px-6 py-3 font-medium text-muted-foreground shadow-none bg-transparent hover:text-foreground transition-all data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                   >
-                     <div className="flex items-center gap-2">
-                       <Database className="w-4 h-4" />
-                       <span>数据源管理</span>
-                     </div>
-                   </TabsTrigger>
-                   <TabsTrigger 
-                     value="graph"
-                     className="relative rounded-none border-b-2 border-transparent px-6 py-3 font-medium text-muted-foreground shadow-none bg-transparent hover:text-foreground transition-all data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
-                   >
-                     <div className="flex items-center gap-2">
-                       <Network className="w-4 h-4" />
-                       <span>知识图谱</span>
-                     </div>
-                   </TabsTrigger>
-                </TabsList>
-              </div>
-
-              {/* 数据源管理 */}
-              <TabsContent value="sources" className="space-y-4">
+            <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-xl font-bold">外部数据源</h3>
-                    <p className="text-sm text-gray-600">连接和管理医学知识库</p>
+                    <h3 className="text-xl font-bold">知识库</h3>
+                    <p className="text-sm text-gray-600">链接和管理内部病例库与外部数据源，为AISP提供更加优质的模拟问答参考。</p>
                   </div>
                   <Dialog open={showSourceDialog} onOpenChange={setShowSourceDialog}>
                     <Button onClick={handleAddSource}>
@@ -1132,6 +1141,18 @@ export function AdminDashboard() {
                           />
                         </div>
                         <div className="space-y-2">
+                          <Label>状态</Label>
+                          <Select value={sourceStatus} onValueChange={(v: any) => setSourceStatus(v)}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">激活</SelectItem>
+                              <SelectItem value="inactive">未激活</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="col-span-2 space-y-2">
                           <Label>URL (外部数据源)</Label>
                           <Input
                             placeholder="https://..."
@@ -1336,63 +1357,7 @@ export function AdminDashboard() {
                     </Card>
                   ))}
                 </div>
-              </TabsContent>
-
-              {/* 知识图谱 */}
-              <TabsContent value="graph" className="space-y-4">
-                <div className="mb-4">
-                  <h3 className="text-xl font-bold mb-2">知识图谱节点</h3>
-                  <p className="text-sm text-gray-600">查看和管理医学知识图谱关系</p>
-                </div>
-
-                {/* 按类型分组显示 */}
-                <div className="space-y-6">
-                  {['disease', 'symptom', 'treatment', 'department'].map((type) => {
-                    const nodes = knowledgeNodes.filter(n => n.type === type);
-                    const typeNames = {
-                      disease: '疾病',
-                      symptom: '症状',
-                      treatment: '治疗',
-                      department: '科室'
-                    };
-                    const typeColors = {
-                      disease: 'bg-red-100 text-red-800',
-                      symptom: 'bg-yellow-100 text-yellow-800',
-                      treatment: 'bg-green-100 text-green-800',
-                      department: 'bg-blue-100 text-blue-800'
-                    };
-
-                    return (
-                      <div key={type}>
-                        <h4 className="font-semibold mb-3 flex items-center gap-2">
-                          <Network className="w-5 h-5" />
-                          {typeNames[type as keyof typeof typeNames]} ({nodes.length})
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {nodes.map((node) => (
-                            <Card key={node.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                              <CardContent className="p-4">
-                                <div className="flex items-start justify-between mb-2">
-                                  <h5 className="font-medium text-sm">{node.name}</h5>
-                                  <Badge className={typeColors[type as keyof typeof typeColors]} variant="secondary">
-                                    {node.caseCount}
-                                  </Badge>
-                                </div>
-                                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{node.description}</p>
-                                <div className="flex items-center gap-1 text-xs text-gray-500">
-                                  <Network className="w-3 h-3" />
-                                  <span>{node.relatedNodes.length} 个关联</span>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </TabsContent>
-            </Tabs>
+              </div>
           </TabsContent>
         </Tabs>
 

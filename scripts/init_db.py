@@ -39,6 +39,12 @@ def create_database_if_not_exists():
         return
 
     from sqlalchemy import text
+    from app.config import settings
+
+    # 如果是SQLite，跳过创建数据库步骤
+    if "sqlite" in settings.DATABASE_URL:
+        print("[INFO] 使用SQLite数据库，跳过创建数据库步骤")
+        return
 
     # 连接到postgres默认数据库
     default_db_url = "postgresql://postgres:123456@localhost:5432/postgres"
