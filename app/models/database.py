@@ -26,10 +26,21 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True)
-    full_name = Column(String(100))
+    full_name = Column(String(100), unique=True, index=True)
     role = Column(SQLEnum(UserRole), default=UserRole.STUDENT, nullable=False)
     hashed_password = Column(String(200))
     is_active = Column(Integer, default=1)
+    
+    # 额外身份信息
+    department = Column(String(100))
+    student_id = Column(String(50))
+    teacher_id = Column(String(50))
+
+    # 学习相关统计 (同步文档设计)
+    total_sessions = Column(Integer, default=0)
+    avg_score = Column(Numeric(5, 2), default=0.00)
+    completed_cases = Column(Integer, default=0)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -57,6 +68,7 @@ class Case(Base):
     key_questions = Column(JSON)
 
     created_by = Column(Integer, ForeignKey("users.id"))
+    status = Column(String(20), default="pending")  # draft, pending, approved, rejected
     is_active = Column(Integer, default=1)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -384,6 +396,27 @@ class StudyPlanStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     PAUSED = "paused"
+
+
+class CourseTask(Base):
+    """课程任务表"""
+    __tablename__ = "course_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False)
+    description = Column(Text)
+    teacher_id = Column(Integer, ForeignKey("users.id"))
+    
+    # 存储病例ID列表和学生ID列表 (JSON 格式)
+    case_ids = Column(JSON, default=list)
+    assigned_students = Column(JSON, default=list)
+    
+    difficulty = Column(String(20))  # easy, medium, hard
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # 关系
+    teacher = relationship("User")
 
 
 class StudyPlan(Base):

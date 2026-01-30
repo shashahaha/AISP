@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/app/stores';
+import { authAPI, tasksAPI, casesAPI } from '@/app/services/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -34,8 +35,32 @@ export function TeacherDashboard() {
     clearAuth();
     navigate('/login');
   };
-  const [tasks, setTasks] = useState<CourseTask[]>(mockCourseTasks);
-  const [cases, setCases] = useState<CaseItem[]>(mockCases);
+
+  const adaptCase = (c: any): CaseItem => ({
+    id: c.case_id,
+    name: c.title,
+    department: c.category || '综合',
+    disease: c.title,
+    population: '成人',
+    difficulty: (c.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
+    description: c.description || '',
+    symptoms: c.symptoms ? (typeof c.symptoms === 'object' ? Object.values(c.symptoms).flat() as string[] : []) : [],
+    diagnosis: c.standard_diagnosis,
+    treatment: [],
+    status: c.status || 'approved',
+    creatorId: c.created_by?.toString() || '0',
+    aisp: {
+      avatar: '👤',
+      name: c.patient_info?.name || '未命名',
+      age: c.patient_info?.age || 0,
+      gender: c.patient_info?.gender || '未知',
+      personality: '',
+    },
+    createdAt: c.created_at ? new Date(c.created_at) : new Date(),
+  });
+
+  const [tasks, setTasks] = useState<CourseTask[]>([]);
+  const [cases, setCases] = useState<CaseItem[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [taskName, setTaskName] = useState('');
   const [taskDescription, setTaskDescription] = useState('');
@@ -45,8 +70,6 @@ export function TeacherDashboard() {
   const [editingTask, setEditingTask] = useState<CourseTask | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
-
-  if (!user) return null;
 
   // 病例管理相关状态
   const [showCaseDialog, setShowCaseDialog] = useState(false);
@@ -66,15 +89,52 @@ export function TeacherDashboard() {
   const [aispAvatar, setAispAvatar] = useState('👤');
   const [editingCase, setEditingCase] = useState<CaseItem | null>(null);
 
-  const students = mockUsers.filter(u => u.role.toLowerCase() === 'student');
+  const [students, setStudents] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+      try {
+        const [allUsers, allTasks, allCases] = await Promise.all([
+          authAPI.listUsers(),
+          tasksAPI.list({ teacher_id: Number(user.id) }),
+          casesAPI.list()
+        ]);
+        
+        // Filter for students
+        const studentList = allUsers.filter((u: any) => u.role.toLowerCase() === 'student');
+        setStudents(studentList);
+        
+        // 无论后端是否有数据，只要请求成功，就使用后端返回的列表（可能是空的）
+        const adaptedTasks = allTasks.map(t => ({
+          ...t,
+          id: t.id.toString(),
+          createdAt: new Date(t.created_at),
+          caseIds: t.case_ids,
+          assignedStudents: t.assigned_students
+        }));
+        setTasks(adaptedTasks);
+
+        const adaptedCases: CaseItem[] = allCases.map(adaptCase);
+        setCases(adaptedCases);
+      } catch (error) {
+        console.error("Failed to fetch data", error);
+        // Fallback to mock data if API fails
+        const mockStudents = mockUsers.filter(u => u.role.toLowerCase() === 'student');
+        setStudents(mockStudents);
+      }
+    };
+    fetchData();
+  }, [user?.id]);
+
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
   const [showToast, setShowToast] = useState(false);
   
   if (!user) return null;
-
+  
   // 筛选教师自己的病例
-  const myCases = cases.filter(c => c.creatorId === user.id);
+  const myCases = cases.filter(c => user && c.creatorId === user.id.toString());
   const approvedCases = cases.filter(c => c.status === 'approved');
 
   const resetTaskForm = () => {
@@ -101,135 +161,129 @@ export function TeacherDashboard() {
     setShowCreateDialog(true);
   };
 
-  const handleCreateOrUpdateTask = () => {
+  const handleCreateOrUpdateTask = async () => {
     if (!taskName || selectedCases.length === 0) return;
 
-    if (editingTask) {
-      setTasks(tasks.map(t => t.id === editingTask.id ? {
-        ...t,
+    try {
+      const payload = {
         name: taskName,
         description: taskDescription,
-        caseIds: selectedCases,
+        case_ids: selectedCases.map(id => String(id)),
         difficulty: taskDifficulty,
-        assignedStudents: selectedStudents
-      } : t));
-    } else {
-      const newTask: CourseTask = {
-        id: `task${tasks.length + 1}`,
-        name: taskName,
-        description: taskDescription,
-        teacherId: user.id,
-        caseIds: selectedCases,
-        difficulty: taskDifficulty,
-        createdAt: new Date(),
-        assignedStudents: selectedStudents,
+        assigned_students: selectedStudents.map(id => String(id))
       };
-      setTasks([...tasks, newTask]);
-    }
 
-    setShowCreateDialog(false);
-    resetTaskForm();
+      if (editingTask) {
+        const updatedTask = await tasksAPI.update(parseInt(editingTask.id), payload);
+        
+        setTasks(tasks.map(t => t.id === editingTask.id ? {
+          ...updatedTask,
+          id: updatedTask.id.toString(),
+          createdAt: new Date(updatedTask.created_at),
+          caseIds: updatedTask.case_ids,
+          assignedStudents: updatedTask.assigned_students
+        } : t));
+      } else {
+        const newTaskData = {
+          ...payload,
+          teacher_id: Number(user.id),
+        };
+        const createdTask = await tasksAPI.create(newTaskData);
+        
+        setTasks([...tasks, {
+          ...createdTask,
+          id: createdTask.id.toString(),
+          createdAt: new Date(createdTask.created_at),
+          caseIds: createdTask.case_ids,
+          assignedStudents: createdTask.assigned_students
+        }]);
+      }
+
+      setShowCreateDialog(false);
+      resetTaskForm();
+    } catch (error: any) {
+      console.error("Failed to save task:", error.response?.data || error.message);
+      // alert("保存任务失败，请稍后重试");
+    }
   };
 
   const handleDeleteTask = (taskId: string) => {
     setDeleteTaskId(taskId);
   };
 
-  const confirmDeleteTask = () => {
+  const confirmDeleteTask = async () => {
     if (deleteTaskId) {
-      setTasks(tasks.filter(t => t.id !== deleteTaskId));
-      setDeleteTaskId(null);
+      try {
+        await tasksAPI.delete(parseInt(deleteTaskId));
+        setTasks(tasks.filter(t => t.id !== deleteTaskId));
+        setDeleteTaskId(null);
+      } catch (error) {
+        console.error("Failed to delete task", error);
+        alert("删除任务失败，请稍后重试");
+      }
     }
   };
 
-  const handleCaseToggle = (caseId: string) => {
-    setSelectedCases(prev =>
-      prev.includes(caseId)
-        ? prev.filter(id => id !== caseId)
-        : [...prev, caseId]
-    );
-  };
-
-  const handleStudentToggle = (studentId: string) => {
+  const handleStudentToggle = (studentId: any) => {
+    const sId = String(studentId);
     setSelectedStudents(prev =>
-      prev.includes(studentId)
-        ? prev.filter(id => id !== studentId)
-        : [...prev, studentId]
+      prev.includes(sId)
+        ? prev.filter(id => id !== sId)
+        : [...prev, sId]
     );
-  };
-
-  const handleToggleAllCases = () => {
-    if (selectedCases.length === approvedCases.length) {
-      setSelectedCases([]);
-    } else {
-      setSelectedCases(approvedCases.map(c => c.id));
-    }
   };
 
   const handleToggleAllStudents = () => {
     if (selectedStudents.length === students.length) {
       setSelectedStudents([]);
     } else {
-      setSelectedStudents(students.map(s => s.id));
+      setSelectedStudents(students.map(s => String(s.id)));
     }
   };
 
   // 病例管理功能
-  const handleCreateOrUpdateCase = () => {
+  const handleCreateOrUpdateCase = async () => {
     if (!caseName || !caseDepartment || !caseDisease || !aispName) {
-      setShowToast(true);
-      setTimeout(() => setShowToast(false), 2000);
       return;
     }
 
-    if (editingCase) {
-      setCases(cases.map(c => c.id === editingCase.id ? {
-        ...c,
-        name: caseName,
-        department: caseDepartment,
-        disease: caseDisease,
-        population: casePopulation,
-        difficulty: caseDifficulty,
-        description: caseDescription,
-        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
-        diagnosis: caseDiagnosis,
-        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
-        aisp: {
-          avatar: aispAvatar,
-          name: aispName,
-          age: parseInt(aispAge) || 30,
-          gender: aispGender,
-          personality: aispPersonality,
-        },
-      } : c));
-    } else {
-      const newCase: CaseItem = {
-        id: `case${cases.length + 1}`,
-        name: caseName,
-        department: caseDepartment,
-        disease: caseDisease,
-        population: casePopulation,
-        difficulty: caseDifficulty,
-        description: caseDescription,
-        symptoms: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
-        diagnosis: caseDiagnosis,
-        treatment: caseTreatment.split(',').map(t => t.trim()).filter(t => t),
-        aisp: {
-          avatar: aispAvatar,
-          name: aispName,
-          age: parseInt(aispAge) || 30,
-          gender: aispGender,
-          personality: aispPersonality,
-        },
-        creatorId: user.id,
-        creatorName: user.name,
-        status: 'pending',
-        createdAt: new Date(),
-      };
-      setCases([...cases, newCase]);
-    }
+    const caseData = {
+      case_id: editingCase ? editingCase.id : `case${Date.now()}`,
+      title: caseName,
+      description: caseDescription,
+      difficulty: caseDifficulty,
+      category: caseDepartment,
+      patient_info: {
+        name: aispName,
+        age: parseInt(aispAge) || 30,
+        gender: aispGender,
+      },
+      chief_complaint: {
+        complaint: caseDescription,
+      },
+      symptoms: {
+        primary: caseSymptoms.split(',').map(s => s.trim()).filter(s => s),
+      },
+      standard_diagnosis: caseDiagnosis,
+      status: 'pending',
+    };
 
-    resetCaseForm();
+    try {
+      if (editingCase) {
+        await casesAPI.update(editingCase.id, caseData);
+      } else {
+        await casesAPI.create(caseData);
+      }
+      
+      // 重新获取病例列表
+      const allCases = await casesAPI.list();
+      const adaptedCases: CaseItem[] = allCases.map(adaptCase);
+      setCases(adaptedCases);
+      resetCaseForm();
+    } catch (error) {
+      console.error("Failed to save case", error);
+      alert("保存病例失败，请稍后重试");
+    }
   };
 
   const handleOpenEditCaseDialog = (caseItem: CaseItem) => {
@@ -268,10 +322,18 @@ export function TeacherDashboard() {
     }
   };
 
-  const handleSubmitToKnowledgeBase = (caseId: string) => {
-    setCases(cases.map(c => 
-      c.id === caseId ? { ...c, status: 'pending' as const } : c
-    ));
+  const handleSubmitToKnowledgeBase = async (caseId: string) => {
+    try {
+      await casesAPI.update(caseId, { status: 'pending' });
+      // 重新获取病例列表
+      const allCases = await casesAPI.list();
+      const adaptedCases: CaseItem[] = allCases.map(adaptCase);
+      setCases(adaptedCases);
+      alert("病例已提交审核");
+    } catch (error) {
+      console.error("Failed to submit case", error);
+      alert("提交审核失败，请稍后重试");
+    }
   };
 
   const resetCaseForm = () => {
@@ -306,31 +368,16 @@ export function TeacherDashboard() {
     }
   };
 
-  // 学习数据统计
-  const weeklyData = [
-    { week: '第1周', 张三: 2.5, 李四: 3 },
-    { week: '第2周', 张三: 3, 李四: 3.5 },
-    { week: '第3周', 张三: 2, 李四: 4 },
-    { week: '第4周', 张三: 4, 李四: 3.8 },
-    { week: '第5周', 张三: 3.5, 李四: 4.2 },
-    { week: '第6周', 张三: 2.8, 李四: 3.5 },
-    { week: '第7周', 张三: 3.2, 李四: 4 },
-  ];
-
-  const scoreData = students.map(student => {
-    const stats = mockLearningStats[student.id];
-    return {
-      name: student.name,
-      averageScore: stats?.averageScore || 0,
-    };
-  });
-
+  // 计算真实的学生分数分布
   const scoreDistributionData = [
-    { name: '优秀(90+)', value: 11, color: '#22c55e' },
-    { name: '良好(80-89)', value: 11, color: '#3b82f6' },
-    { name: '中等(70-79)', value: 4, color: '#eab308' },
-    { name: '待提高(<70)', value: 1, color: '#ef4444' },
+    { name: '优秀(90+)', value: students.filter(s => (s.avg_score || 0) >= 90).length, color: '#22c55e' },
+    { name: '良好(80-89)', value: students.filter(s => (s.avg_score || 0) >= 80 && (s.avg_score || 0) < 90).length, color: '#3b82f6' },
+    { name: '中等(70-79)', value: students.filter(s => (s.avg_score || 0) >= 70 && (s.avg_score || 0) < 80).length, color: '#eab308' },
+    { name: '待提高(<70)', value: students.filter(s => (s.avg_score || 0) > 0 && (s.avg_score || 0) < 70).length, color: '#ef4444' },
   ];
+
+  // 如果没有数据，显示一些默认值或者空状态
+  const hasScoreData = scoreDistributionData.some(d => d.value > 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -339,7 +386,7 @@ export function TeacherDashboard() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold">AISP 教学系统 - 教师端</h1>
-            <p className="text-sm text-gray-500">欢迎，{user.name}</p>
+            <p className="text-sm text-gray-500">欢迎，{user.name || user.username}</p>
           </div>
           <Button variant="ghost" onClick={handleLogout}>
             <LogOut className="w-4 h-4 mr-2" />
@@ -419,42 +466,32 @@ export function TeacherDashboard() {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>选择病例 * （已选 {selectedCases.length} 个）</Label>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-6 text-xs text-blue-600 hover:text-blue-700 p-0"
-                          onClick={handleToggleAllCases}
-                        >
-                          {selectedCases.length === approvedCases.length ? '取消全选' : '全选'}
-                        </Button>
-                      </div>
-                      <div className="border rounded-lg p-4 max-h-60 overflow-y-auto space-y-2">
-                        {approvedCases.map(caseItem => (
-                          <div key={caseItem.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={caseItem.id}
-                              checked={selectedCases.includes(caseItem.id)}
-                              onCheckedChange={() => handleCaseToggle(caseItem.id)}
-                            />
-                            <label
-                              htmlFor={caseItem.id}
-                              className="flex-1 text-sm cursor-pointer"
-                            >
-                              {caseItem.name} - {caseItem.department}
-                            </label>
-                            <Badge className={
-                              caseItem.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                              caseItem.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
-                            }>
-                              {caseItem.difficulty === 'easy' ? '简单' : 
-                               caseItem.difficulty === 'medium' ? '中等' : '困难'}
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
+                      <Label>选择病例 *</Label>
+                      <Select 
+                        value={selectedCases[0] || ""} 
+                        onValueChange={(value) => setSelectedCases([value])}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="请选择一个病例" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {approvedCases.map(caseItem => (
+                             <SelectItem key={caseItem.id} value={caseItem.id}>
+                               <div className="flex items-center justify-between w-full gap-4">
+                                 <span>{caseItem.name} - {caseItem.department}</span>
+                                 <Badge className={
+                                   caseItem.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
+                                   caseItem.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                   'bg-red-100 text-red-800'
+                                 }>
+                                   {caseItem.difficulty === 'easy' ? '简单' : 
+                                    caseItem.difficulty === 'medium' ? '中等' : '困难'}
+                                 </Badge>
+                               </div>
+                             </SelectItem>
+                           ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
@@ -470,20 +507,23 @@ export function TeacherDashboard() {
                       </div>
                       <div className="border rounded-lg p-4 max-h-40 overflow-y-auto space-y-2">
                         {students.map(student => (
-                          <div key={student.id} className="flex items-center space-x-2">
+                          <div key={String(student.id)} className="flex items-center space-x-2">
                             <Checkbox
-                              id={student.id}
-                              checked={selectedStudents.includes(student.id)}
+                              id={`student-${student.id}`}
+                              checked={selectedStudents.includes(String(student.id))}
                               onCheckedChange={() => handleStudentToggle(student.id)}
                             />
                             <label
-                              htmlFor={student.id}
+                              htmlFor={`student-${student.id}`}
                               className="flex-1 text-sm cursor-pointer"
                             >
-                              {student.name} ({student.studentId})
+                              {student.full_name || student.name} ({student.username})
                             </label>
                           </div>
                         ))}
+                        {students.length === 0 && (
+                          <p className="text-center py-4 text-gray-500 text-sm">暂无学生数据</p>
+                        )}
                       </div>
                     </div>
                     <Button
@@ -577,13 +617,16 @@ export function TeacherDashboard() {
                       <p className="text-sm font-medium mb-2">分配学生：</p>
                       <div className="flex flex-wrap gap-2">
                         {task.assignedStudents.map(studentId => {
-                          const student = students.find(s => s.id === studentId);
+                          const student = students.find(s => String(s.id) === String(studentId));
                           return student ? (
                             <Badge key={studentId} variant="secondary">
-                              {student.name}
+                              {student.full_name || student.name}
                             </Badge>
                           ) : null;
                         })}
+                        {task.assignedStudents.length === 0 && (
+                          <span className="text-xs text-gray-400 italic">未分配学生</span>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -628,11 +671,25 @@ export function TeacherDashboard() {
                       </div>
                       <div className="space-y-2">
                         <Label>科室 *</Label>
-                        <Input
-                          placeholder="输入科室名称"
-                          value={caseDepartment}
-                          onChange={(e) => setCaseDepartment(e.target.value)}
-                        />
+                        <Select value={caseDepartment} onValueChange={setCaseDepartment}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择科室" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="内科">内科</SelectItem>
+                            <SelectItem value="外科">外科</SelectItem>
+                            <SelectItem value="妇产科">妇产科</SelectItem>
+                            <SelectItem value="儿科">儿科</SelectItem>
+                            <SelectItem value="急诊科">急诊科</SelectItem>
+                            <SelectItem value="精神科">精神科</SelectItem>
+                            <SelectItem value="皮肤科">皮肤科</SelectItem>
+                            <SelectItem value="眼科">眼科</SelectItem>
+                            <SelectItem value="耳鼻喉科">耳鼻喉科</SelectItem>
+                            <SelectItem value="口腔科">口腔科</SelectItem>
+                            <SelectItem value="康复医学科">康复医学科</SelectItem>
+                            <SelectItem value="中医科">中医科</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>疾病 *</Label>
@@ -914,7 +971,7 @@ export function TeacherDashboard() {
                   <TrendingUp className="w-4 h-4 text-gray-500" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{mockEvaluations.length}</div>
+                  <div className="text-2xl font-bold">{students.reduce((sum, s) => sum + (s.total_sessions || 0), 0)}</div>
                   <p className="text-xs text-gray-500 mt-1">本学期累计</p>
                 </CardContent>
               </Card>
@@ -925,9 +982,11 @@ export function TeacherDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {Math.round(mockEvaluations.reduce((sum, e) => sum + e.duration, 0) / mockEvaluations.length)}
+                    {students.length > 0 
+                      ? Math.round(students.reduce((sum, s) => sum + (s.total_sessions || 0) * 15, 0) / (students.reduce((sum, s) => sum + (s.total_sessions || 0), 0) || 1)) 
+                      : 0}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">分钟/次</p>
+                  <p className="text-xs text-gray-500 mt-1">分钟/次 (估算)</p>
                 </CardContent>
               </Card>
               <Card>
@@ -937,7 +996,9 @@ export function TeacherDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {Math.round(mockEvaluations.reduce((sum, e) => sum + e.score, 0) / mockEvaluations.length)}
+                    {students.length > 0
+                      ? Math.round(students.reduce((sum, s) => sum + (s.avg_score || 0), 0) / students.length)
+                      : 0}
                   </div>
                   <p className="text-xs text-gray-500 mt-1">全班平均分</p>
                 </CardContent>
@@ -948,32 +1009,12 @@ export function TeacherDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>每周练习时长统计</CardTitle>
-                  <CardDescription>学生每周练习时长对比</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={weeklyData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="week" />
-                      <YAxis label={{ value: '小时', angle: -90, position: 'insideLeft' }} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="张三" stroke="#3b82f6" strokeWidth={2} />
-                      <Line type="monotone" dataKey="李四" stroke="#10b981" strokeWidth={2} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
                   <CardTitle>学生平均分数对比</CardTitle>
                   <CardDescription>各学生平均得分情况</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={scoreData}>
+                    <BarChart data={students.map(s => ({ name: s.full_name || s.name, averageScore: s.avg_score || 0 }))}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
                       <YAxis domain={[0, 100]} />
@@ -1015,23 +1056,23 @@ export function TeacherDashboard() {
 
               <Card>
                 <CardHeader>
-                  <CardTitle>学期练习时长统计</CardTitle>
-                  <CardDescription>学生本学期总练习时长</CardDescription>
+                  <CardTitle>学生完成病例统计</CardTitle>
+                  <CardDescription>各学生累计完成病例数量</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart
                       data={students.map(s => ({
-                        name: s.name,
-                        hours: mockLearningStats[s.id]?.semesterHours || 0,
+                        name: s.full_name || s.name,
+                        completed: s.completed_cases || 0,
                       }))}
                     >
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="name" />
-                      <YAxis label={{ value: '小时', angle: -90, position: 'insideLeft' }} />
+                      <YAxis label={{ value: '个', angle: -90, position: 'insideLeft' }} />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="hours" name="练习时长" fill="#10b981" />
+                      <Bar dataKey="completed" name="完成病例数" fill="#10b981" />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -1047,45 +1088,39 @@ export function TeacherDashboard() {
               <CardContent>
                 <div className="space-y-4">
                   {students.map(student => {
-                    const stats = mockLearningStats[student.id];
-                    const studentEvals = mockEvaluations.filter(e => e.studentId === student.id);
                     return (
-                      <Card key={student.id}>
+                      <Card key={String(student.id)}>
                         <CardContent className="pt-6">
                           <div className="flex items-center justify-between mb-4">
                             <div>
-                              <h4 className="font-semibold">{student.name}</h4>
-                              <p className="text-sm text-gray-500">{student.studentId}</p>
+                              <h4 className="font-semibold">{student.full_name || student.name}</h4>
+                              <p className="text-sm text-gray-500">{student.username}</p>
                             </div>
                             <Badge className={
-                              (stats?.averageScore || 0) >= 90 ? 'bg-green-100 text-green-800' :
-                              (stats?.averageScore || 0) >= 80 ? 'bg-blue-100 text-blue-800' :
-                              (stats?.averageScore || 0) >= 70 ? 'bg-yellow-100 text-yellow-800' :
+                              (student.avg_score || 0) >= 90 ? 'bg-green-100 text-green-800' :
+                              (student.avg_score || 0) >= 80 ? 'bg-blue-100 text-blue-800' :
+                              (student.avg_score || 0) >= 70 ? 'bg-yellow-100 text-yellow-800' :
                               'bg-red-100 text-red-800'
                             }>
-                              平均分：{stats?.averageScore || 0}
+                              平均分：{student.avg_score || 0}
                             </Badge>
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                             <div>
                               <p className="text-gray-500">完成病例</p>
-                              <p className="font-medium">{stats?.completedCases || 0} 个</p>
+                              <p className="font-medium">{student.completed_cases || 0} 个</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">学期时长</p>
-                              <p className="font-medium">{stats?.semesterHours || 0} 小时</p>
+                              <p className="text-gray-500">累计次数</p>
+                              <p className="font-medium">{student.total_sessions || 0} 次</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">练习次数</p>
-                              <p className="font-medium">{studentEvals.length} 次</p>
+                              <p className="text-gray-500">练习状态</p>
+                              <p className="font-medium">{student.total_sessions > 0 ? '进行中' : '未开始'}</p>
                             </div>
                             <div>
-                              <p className="text-gray-500">最近练习</p>
-                              <p className="font-medium">
-                                {studentEvals.length > 0
-                                  ? studentEvals[studentEvals.length - 1].timestamp.toLocaleDateString('zh-CN')
-                                  : '暂无'}
-                              </p>
+                              <p className="text-gray-500">角色</p>
+                              <p className="font-medium">学生</p>
                             </div>
                           </div>
                         </CardContent>
@@ -1136,14 +1171,14 @@ export function TeacherDashboard() {
         </Tabs>
 
         {/* 全局 Toast 提示 */}
-        {showToast && (
+        {/* {showToast && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
             <div className="bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl text-base font-medium animate-in fade-in zoom-in-95 flex items-center justify-center pointer-events-auto">
               <XCircle className="w-5 h-5 mr-2" />
               必填项没填
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );

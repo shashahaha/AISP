@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/app/stores";
 import {
@@ -43,6 +43,7 @@ import {
   mockCourseTasks,
 } from "@/app/mockData";
 import { AISPDialog } from "@/app/components/AISPDialog";
+import { tasksAPI, casesAPI, apiClientInstance } from "@/app/services/api";
 import {
   LogOut,
   Award,
@@ -70,11 +71,7 @@ export function StudentDashboard() {
   const [selectedCase, setSelectedCase] =
     useState<CaseItem | null>(null);
   
-  if (!user) return null;
-
-  const [evaluations, setEvaluations] = useState<
-    EvaluationResult[]
-  >(user ? mockEvaluations.filter((e) => e.studentId === user.id) : []);
+  const [evaluations, setEvaluations] = useState<EvaluationResult[]>([]);
 
   // 筛选条件
   const [selectedDepartment, setSelectedDepartment] =
@@ -87,9 +84,83 @@ export function StudentDashboard() {
   const [selectedHistoryEvaluation, setSelectedHistoryEvaluation] = useState<EvaluationResult | null>(null);
 
   // 获取学生的课程任务
-  const myCourseTasks = user ? mockCourseTasks.filter((task) =>
-    task.assignedStudents.includes(user.id),
-  ) : [];
+  const [myCourseTasks, setMyCourseTasks] = useState<CourseTask[]>([]);
+  const [cases, setCases] = useState<CaseItem[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user) return;
+      try {
+        const [tasks, allCases, sessions] = await Promise.all([
+          tasksAPI.list({ student_id: user.id.toString() }),
+          casesAPI.list({ status: 'approved' }),
+          apiClientInstance.listSessions('completed')
+        ]);
+        
+        // 适配任务数据
+        const adaptedTasks = tasks.map(t => ({
+          ...t,
+          id: t.id.toString(),
+          createdAt: new Date(t.created_at),
+          caseIds: t.case_ids,
+          assignedStudents: t.assigned_students
+        }));
+        setMyCourseTasks(adaptedTasks);
+
+        // 适配病例数据
+        if (allCases && allCases.length > 0) {
+          const adaptedCases: CaseItem[] = allCases.map(c => ({
+            id: c.case_id,
+            name: c.title,
+            department: c.category || '综合',
+            disease: c.title,
+            population: '成人',
+            difficulty: (c.difficulty || 'medium') as 'easy' | 'medium' | 'hard',
+            description: c.description || '',
+            symptoms: c.symptoms ? Object.values(c.symptoms).flat() as string[] : [],
+            diagnosis: c.standard_diagnosis,
+            treatment: [],
+            aisp: {
+              avatar: '👤',
+              name: c.patient_info?.name || '未命名',
+              age: c.patient_info?.age || 0,
+              gender: c.patient_info?.gender || '未知',
+              personality: '',
+              background: c.description || ''
+            },
+            status: (c as any).status || 'approved',
+            createdAt: new Date(c.created_at || new Date()),
+          }));
+          setCases(adaptedCases);
+        }
+
+        // 适配评分数据
+        if (sessions && sessions.length > 0) {
+          const adaptedEvaluations: EvaluationResult[] = sessions.map((s: any) => ({
+            id: s.session_id,
+            studentId: user.id.toString(),
+            caseId: s.case_id,
+            score: s.scores?.total || 0,
+            communicationScore: s.scores?.communication?.total || 0,
+            diagnosisScore: s.scores?.diagnosis?.total || 0,
+            treatmentScore: s.scores?.inquiry?.total || 0,
+            duration: Math.ceil((new Date(s.completed_at).getTime() - new Date(s.created_at).getTime()) / 60000) || 5,
+            timestamp: new Date(s.completed_at),
+            feedback: s.ai_comments || '',
+            messages: s.messages?.map((m: any) => ({
+              role: m.role,
+              content: m.content,
+              type: 'text'
+            })) || []
+          }));
+          setEvaluations(adaptedEvaluations);
+        }
+      } catch (error) {
+        console.error("Failed to fetch data", error);
+      }
+    };
+    fetchData();
+  }, [user]);
 
   if (!user) return null;
 
@@ -100,7 +171,7 @@ export function StudentDashboard() {
 
   const handleStartPractice = () => {
     // 根据筛选条件随机选择一个病例
-    let availableCases = mockCases.filter(
+    let availableCases = cases.filter(
       (c) => c.status === "approved",
     );
 
@@ -142,7 +213,7 @@ export function StudentDashboard() {
 
   const handleStartCourseTask = (task: CourseTask) => {
     // 从课程任务中随机选择一个病例
-    const taskCases = mockCases.filter((c) =>
+    const taskCases = cases.filter((c) =>
       task.caseIds.includes(c.id),
     );
     if (taskCases.length > 0) {
@@ -166,10 +237,21 @@ export function StudentDashboard() {
   );
 
   const departments = [
-    ...new Set(mockCases.map((c) => c.department)),
+    "内科",
+    "外科",
+    "妇产科",
+    "儿科",
+    "急诊科",
+    "精神科",
+    "皮肤科",
+    "眼科",
+    "耳鼻喉科",
+    "口腔科",
+    "康复医学科",
+    "中医科",
   ];
   const populations = [
-    ...new Set(mockCases.map((c) => c.population)),
+    ...new Set(cases.map((c) => c.population)),
   ];
 
   const getScoreColor = (score: number) => {
@@ -265,7 +347,7 @@ export function StudentDashboard() {
                 AISP 教学系统
               </h1>
               <p className="text-sm text-gray-600">
-                你好，{user.name}
+                欢迎，{user.name || user.username}
               </p>
             </div>
           </div>
@@ -519,7 +601,7 @@ export function StudentDashboard() {
             ) : (
               <div className="grid grid-cols-1 gap-4">
                 {myCourseTasks.map((task) => {
-                  const taskCases = mockCases.filter((c) =>
+                  const taskCases = cases.filter((c) =>
                     task.caseIds.includes(c.id),
                   );
                   const completedCount = evaluations.filter(
@@ -610,7 +692,7 @@ export function StudentDashboard() {
                 {[...evaluations]
                   .reverse()
                   .map((evaluation) => {
-                    const caseItem = mockCases.find(
+                    const caseItem = cases.find(
                       (c) => c.id === evaluation.caseId,
                     );
                     if (!caseItem) return null;
@@ -720,7 +802,7 @@ export function StudentDashboard() {
           <DialogHeader>
             <DialogTitle>对话历史记录</DialogTitle>
             <DialogDescription>
-              回顾您与 {selectedHistoryEvaluation && mockCases.find(c => c.id === selectedHistoryEvaluation.caseId)?.aisp.name} 的完整对话过程
+              回顾您与 {selectedHistoryEvaluation && cases.find(c => c.id === selectedHistoryEvaluation.caseId)?.aisp.name} 的完整对话过程
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 rounded-lg border">

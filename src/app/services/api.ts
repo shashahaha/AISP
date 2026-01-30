@@ -72,6 +72,8 @@ export interface Case {
   differential_diagnosis?: string[];
   key_questions?: string[];
   is_active: number;
+  status: string;
+  created_by?: number;
   created_at?: string;
 }
 
@@ -127,9 +129,9 @@ export const authAPI = {
     return response.data;
   },
 
-  register: async (username: string, password: string, email: string, role: string) => {
+  register: async (username: string, password: string, email: string, role: string, fullName?: string) => {
     const response = await apiClient.post('/api/auth/register', null, {
-      params: { username, password, email, role }
+      params: { username, password, email, role, full_name: fullName }
     });
     return response.data;
   },
@@ -152,7 +154,8 @@ export const authAPI = {
         username: userData.username,
         password: userData.password,
         email: userData.email,
-        role: userData.role
+        role: userData.role,
+        full_name: userData.full_name
       }
     });
     return response.data;
@@ -171,10 +174,12 @@ export const authAPI = {
 
 // 病例接口
 export const casesAPI = {
-  list: async (filters?: { category?: string; difficulty?: string; is_active?: boolean }): Promise<Case[]> => {
+  list: async (filters?: { category?: string; difficulty?: string; is_active?: boolean; status?: string; created_by?: number }): Promise<Case[]> => {
     const params = new URLSearchParams();
     if (filters?.category) params.append('category', filters.category);
     if (filters?.difficulty) params.append('difficulty', filters.difficulty);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.created_by) params.append('created_by', filters.created_by.toString());
     if (filters?.is_active !== undefined) params.append('is_active', filters.is_active.toString());
 
     const response = await apiClient.get(`/api/cases?${params}`);
@@ -198,6 +203,7 @@ export const casesAPI = {
     standard_diagnosis: string;
     differential_diagnosis?: string[];
     key_questions?: string[];
+    status?: string;
   }): Promise<Case> => {
     const response = await apiClient.post('/api/cases', caseData);
     return response.data;
@@ -215,6 +221,44 @@ export const casesAPI = {
   getCategories: async (): Promise<string[]> => {
     const response = await apiClient.get('/api/cases/categories/list');
     return response.data;
+  },
+};
+
+// 任务接口
+export const tasksAPI = {
+  list: async (filters?: { teacher_id?: number; student_id?: string }): Promise<any[]> => {
+    const params = new URLSearchParams();
+    if (filters?.teacher_id) params.append('teacher_id', filters.teacher_id.toString());
+    if (filters?.student_id) params.append('student_id', filters.student_id);
+
+    const response = await apiClient.get(`/api/tasks?${params}`);
+    return response.data;
+  },
+
+  get: async (taskId: number): Promise<any> => {
+    const response = await apiClient.get(`/api/tasks/${taskId}`);
+    return response.data;
+  },
+
+  create: async (taskData: {
+    name: string;
+    description?: string;
+    teacher_id: number;
+    case_ids: string[];
+    difficulty: string;
+    assigned_students: string[];
+  }): Promise<any> => {
+    const response = await apiClient.post('/api/tasks', taskData);
+    return response.data;
+  },
+
+  update: async (taskId: number, taskData: any): Promise<any> => {
+    const response = await apiClient.put(`/api/tasks/${taskId}`, taskData);
+    return response.data;
+  },
+
+  delete: async (taskId: number): Promise<void> => {
+    await apiClient.delete(`/api/tasks/${taskId}`);
   },
 };
 

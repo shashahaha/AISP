@@ -6,7 +6,7 @@ from sqlalchemy import select
 from typing import Dict, Optional
 from datetime import timedelta
 
-from app.models.database import User
+from app.models.database import User, UserRole
 from app.models.schemas import UserResponse, UserBase
 from app.db.session import get_async_db
 from app.utils.auth import (
@@ -69,6 +69,7 @@ async def register(
     password: str,
     email: str,
     role: str = "student",
+    full_name: Optional[str] = None,
     db: AsyncSession = Depends(get_async_db)
 ):
     """用户注册"""
@@ -82,13 +83,33 @@ async def register(
             detail="用户名已存在"
         )
 
+    # 检查姓名是否存在
+    if full_name:
+        result = await db.execute(
+            select(User).where(User.full_name == full_name)
+        )
+        if result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="用户姓名已存在"
+            )
+
     # 创建新用户
     hashed_password = get_password_hash(password)
+    
+    # 确保角色是大写
+    try:
+        user_role = UserRole(role.upper())
+    except ValueError:
+        # 如果不是有效的角色，默认为 STUDENT
+        user_role = UserRole.STUDENT
+        
     new_user = User(
         username=username,
         hashed_password=hashed_password,
         email=email,
-        role=role
+        role=user_role,
+        full_name=full_name
     )
     db.add(new_user)
     await db.commit()
@@ -130,7 +151,8 @@ async def login(
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "role": user.role
+            "role": user.role,
+            "name": user.full_name or user.username
         }
     }
 
@@ -162,8 +184,8 @@ async def list_users(
     db: AsyncSession = Depends(get_async_db),
     current_user: User = Depends(get_current_user)
 ):
-    """获取所有用户列表（仅管理员）"""
-    if current_user.role.upper() != "ADMIN":
+    """获取所有用户列表（管理员和教师）"""
+    if current_user.role.upper() not in ["ADMIN", "TEACHER"]:
         raise HTTPException(status_code=403, detail="没有权限访问用户列表")
     
     result = await db.execute(select(User).order_by(User.id))
@@ -193,6 +215,16 @@ async def update_user(
     if "role" in user_data:
         user.role = user_data["role"]
     if "full_name" in user_data:
+        # 检查姓名是否冲突
+        if user_data["full_name"] and user_data["full_name"] != user.full_name:
+            result = await db.execute(
+                select(User).where(User.full_name == user_data["full_name"])
+            )
+            if result.scalar_one_or_none():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="用户姓名已存在"
+                )
         user.full_name = user_data["full_name"]
     if "password" in user_data and user_data["password"]:
         user.hashed_password = get_password_hash(user_data["password"])

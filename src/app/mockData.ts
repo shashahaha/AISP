@@ -372,7 +372,7 @@ export const mockKnowledgeSources: KnowledgeSource[] = [
     status: 'active',
     caseCount: 3500,
     lastSync: new Date('2026-01-14'),
-    category: '综合医学',
+    category: '',
   },
   {
     id: 'ks3',

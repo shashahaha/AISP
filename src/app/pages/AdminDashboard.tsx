@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { User, CaseItem, ScoringCriteria, KnowledgeSource, KnowledgeNode } from '@/app/types';
 import { mockCases, mockScoringCriteria, mockKnowledgeSources, mockKnowledgeNodes } from '@/app/mockData';
-import { authAPI } from '@/app/services/api';
+import { authAPI, casesAPI } from '@/app/services/api';
 import { toastUtils } from '@/app/lib/toast';
 import { 
   LogOut, 
@@ -54,6 +54,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     fetchUsers();
+    fetchCases();
   }, []);
 
   const handleLogout = () => {
@@ -67,13 +68,68 @@ export function AdminDashboard() {
       const data = await authAPI.listUsers();
       setUsers(data);
     } catch (err) {
-      toastUtils.error('获取用户列表失败');
+      console.error('获取用户列表失败', err);
+      // toastUtils.error('获取用户列表失败');
     } finally {
       setLoadingUsers(false);
     }
   };
 
-  if (!user) return null;
+  const fetchCases = async () => {
+    try {
+      const data = await casesAPI.list({ is_active: true });
+      // 只要请求成功，就使用后端返回的列表
+      const adaptedCases: CaseItem[] = data.map(c => ({
+        id: c.case_id,
+        name: c.title,
+        department: c.category,
+        disease: c.title, // 暂时用 title 代替
+        population: '成人', // 后端模型暂无此字段
+        difficulty: c.difficulty as 'easy' | 'medium' | 'hard',
+        description: c.description || '',
+        symptoms: c.symptoms ? (typeof c.symptoms === 'object' ? Object.values(c.symptoms).flat() as string[] : []) : [],
+        diagnosis: c.standard_diagnosis,
+        treatment: [], // 后端模型暂无此字段
+        aisp: {
+          avatar: '👤',
+          name: c.patient_info.name || '未命名',
+          age: c.patient_info.age || 0,
+          gender: c.patient_info.gender || '未知',
+          personality: '',
+        },
+        status: (c as any).status || 'approved',
+        creatorId: (c as any).created_by?.toString() || '0',
+        createdAt: c.created_at ? new Date(c.created_at) : new Date(),
+      }));
+      setCases(adaptedCases);
+    } catch (err) {
+      console.error('获取病例列表失败', err);
+      // setCases(mockCases); // 只有出错时才保持 mock 数据或设为空
+    }
+  };
+
+  const handleApproveCase = async (caseId: string) => {
+    try {
+      await casesAPI.update(caseId, { status: 'approved' });
+      showToastMessage('病例已通过审核');
+      fetchCases();
+    } catch (err) {
+      console.error('审核病例失败', err);
+      showToastMessage('审核病例失败');
+    }
+  };
+
+  const handleRejectCase = async (caseId: string) => {
+    try {
+      await casesAPI.update(caseId, { status: 'rejected' });
+      showToastMessage('病例已被拒绝');
+      fetchCases();
+    } catch (err) {
+      console.error('拒绝病例失败', err);
+      showToastMessage('拒绝病例失败');
+    }
+  };
+
   const [cases, setCases] = useState<CaseItem[]>(mockCases);
   const [criteria, setCriteria] = useState<ScoringCriteria[]>(mockScoringCriteria);
   const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>(mockKnowledgeSources);
@@ -87,6 +143,8 @@ export function AdminDashboard() {
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [userDepartment, setUserDepartment] = useState('');
+  const [userStudentId, setUserStudentId] = useState('');
+  const [userTeacherId, setUserTeacherId] = useState('');
 
   // 病例管理相关
   const [showCaseDialog, setShowCaseDialog] = useState(false);
@@ -132,6 +190,8 @@ export function AdminDashboard() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
+  if (!user) return null;
+
   const showToastMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
@@ -140,7 +200,7 @@ export function AdminDashboard() {
 
   const handleSaveUser = async () => {
     if (!userUsername || (!editingUser && !userPassword) || !userEmail) {
-      showToastMessage('必填项没填');
+      // showToastMessage('必填项没填');
       return;
     }
 
@@ -151,15 +211,22 @@ export function AdminDashboard() {
           full_name: userName,
           email: userEmail,
           role: userRole,
+          department: userDepartment,
+          student_id: userRole === 'student' ? userStudentId : undefined,
+          teacher_id: userRole === 'teacher' ? userTeacherId : undefined,
           password: userPassword || undefined,
         });
         toastUtils.success('用户更新成功');
       } else {
         await authAPI.createUser({
           username: userUsername,
+          full_name: userName,
           password: userPassword,
           email: userEmail,
           role: userRole,
+          department: userDepartment,
+          student_id: userRole === 'student' ? userStudentId : undefined,
+          teacher_id: userRole === 'teacher' ? userTeacherId : undefined,
         });
         toastUtils.success('用户创建成功');
       }
@@ -167,6 +234,7 @@ export function AdminDashboard() {
       resetUserForm();
     } catch (err: any) {
       const msg = err.response?.data?.detail || '保存失败';
+      console.error(msg);
       toastUtils.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
   };
@@ -178,7 +246,9 @@ export function AdminDashboard() {
     setUserPassword(''); // 不回显密码
     setUserEmail(user.email || '');
     setUserRole(user.role);
-    setUserDepartment(''); // 后端暂未存储 department
+    setUserDepartment(user.department || '');
+    setUserStudentId(user.student_id || '');
+    setUserTeacherId(user.teacher_id || '');
     setShowUserDialog(true);
   };
 
@@ -190,6 +260,8 @@ export function AdminDashboard() {
     setUserEmail('');
     setUserRole('student');
     setUserDepartment('');
+    setUserStudentId('');
+    setUserTeacherId('');
     setShowUserDialog(true);
   };
 
@@ -207,11 +279,13 @@ export function AdminDashboard() {
     setUserEmail('');
     setUserRole('student');
     setUserDepartment('');
+    setUserStudentId('');
+    setUserTeacherId('');
   };
 
   const handleSaveCase = () => {
     if (!caseName || !caseDepartment || !caseDisease || !aispName || !aispAvatar) {
-      showToastMessage('必填项没填');
+      // showToastMessage('必填项没填');
       return;
     }
 
@@ -454,7 +528,7 @@ export function AdminDashboard() {
       switch (deleteTarget.type) {
         case 'user':
           await authAPI.deleteUser(Number(deleteTarget.id));
-          toastUtils.success('用户已删除');
+          // toastUtils.success('用户已删除');
           fetchUsers();
           break;
         case 'case':
@@ -465,7 +539,8 @@ export function AdminDashboard() {
           break;
       }
     } catch (err) {
-      toastUtils.error('删除失败');
+      console.error('删除失败', err);
+      // toastUtils.error('删除失败');
     }
     
     setDeleteTarget(null);
@@ -474,7 +549,7 @@ export function AdminDashboard() {
 
   const handleSaveSource = () => {
     if (!sourceName || !sourceDescription) {
-      showToastMessage('必填项没填');
+      // showToastMessage('必填项没填');
       return;
     }
 
@@ -516,7 +591,7 @@ export function AdminDashboard() {
         <div className="container mx-auto px-6 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-xl font-semibold">AISP 教学系统 - 超级管理员</h1>
-            <p className="text-sm text-gray-500">欢迎，{user.name}</p>
+            <p className="text-sm text-gray-500">欢迎，{user.name || user.username}</p>
           </div>
           <Button variant="ghost" onClick={handleLogout}>
             <LogOut className="w-4 h-4 mr-2" />
@@ -623,6 +698,26 @@ export function AdminDashboard() {
                         onChange={(e) => setUserDepartment(e.target.value)}
                       />
                     </div>
+                    {userRole === 'student' && (
+                      <div className="space-y-2">
+                        <Label>学号</Label>
+                        <Input
+                          placeholder="输入学号"
+                          value={userStudentId}
+                          onChange={(e) => setUserStudentId(e.target.value)}
+                        />
+                      </div>
+                    )}
+                    {userRole === 'teacher' && (
+                      <div className="space-y-2">
+                        <Label>工号</Label>
+                        <Input
+                          placeholder="输入工号"
+                          value={userTeacherId}
+                          onChange={(e) => setUserTeacherId(e.target.value)}
+                        />
+                      </div>
+                    )}
                   </div>
                   <Button onClick={handleSaveUser} className="w-full relative">
                     {editingUser ? '保存修改' : '创建用户'}
@@ -640,20 +735,19 @@ export function AdminDashboard() {
                       <TableHead>用户名</TableHead>
                       <TableHead>邮箱</TableHead>
                       <TableHead>角色</TableHead>
-                      <TableHead>院系/部门</TableHead>
                       <TableHead>操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingUsers ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10">
+                        <TableCell colSpan={5} className="text-center py-10">
                           加载中...
                         </TableCell>
                       </TableRow>
                     ) : users.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-10">
+                        <TableCell colSpan={5} className="text-center py-10">
                           暂无用户数据
                         </TableCell>
                       </TableRow>
@@ -673,7 +767,6 @@ export function AdminDashboard() {
                             {u.role.toLowerCase() === 'admin' ? '管理员' : u.role.toLowerCase() === 'teacher' ? '教师' : '学生'}
                           </Badge>
                         </TableCell>
-                        <TableCell>{u.department || '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button 
@@ -733,11 +826,25 @@ export function AdminDashboard() {
                       </div>
                       <div className="space-y-2">
                         <Label>科室 *</Label>
-                        <Input
-                          placeholder="输入科室名称"
-                          value={caseDepartment}
-                          onChange={(e) => setCaseDepartment(e.target.value)}
-                        />
+                        <Select value={caseDepartment} onValueChange={setCaseDepartment}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择科室" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="内科">内科</SelectItem>
+                            <SelectItem value="外科">外科</SelectItem>
+                            <SelectItem value="妇产科">妇产科</SelectItem>
+                            <SelectItem value="儿科">儿科</SelectItem>
+                            <SelectItem value="急诊科">急诊科</SelectItem>
+                            <SelectItem value="精神科">精神科</SelectItem>
+                            <SelectItem value="皮肤科">皮肤科</SelectItem>
+                            <SelectItem value="眼科">眼科</SelectItem>
+                            <SelectItem value="耳鼻喉科">耳鼻喉科</SelectItem>
+                            <SelectItem value="口腔科">口腔科</SelectItem>
+                            <SelectItem value="康复医学科">康复医学科</SelectItem>
+                            <SelectItem value="中医科">中医科</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-2">
                         <Label>疾病 *</Label>
@@ -919,6 +1026,32 @@ export function AdminDashboard() {
                           {caseItem.difficulty === 'easy' ? '简单' :
                            caseItem.difficulty === 'medium' ? '中等' : '困难'}
                         </Badge>
+                        {caseItem.status === 'pending' && (
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              className="h-8 bg-green-600 hover:bg-green-700"
+                              onClick={() => handleApproveCase(caseItem.id)}
+                            >
+                              通过
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-red-600 border-red-200 hover:bg-red-50"
+                              onClick={() => handleRejectCase(caseItem.id)}
+                            >
+                              拒绝
+                            </Button>
+                          </div>
+                        )}
+                        {caseItem.status !== 'pending' && (
+                          <Badge className={
+                            caseItem.status === 'approved' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'
+                          }>
+                            {caseItem.status === 'approved' ? '已发布' : '已拒绝'}
+                          </Badge>
+                        )}
                         <Button 
                           variant="ghost" 
                           size="sm"
@@ -1269,13 +1402,10 @@ export function AdminDashboard() {
                                     : 'bg-gray-100 text-gray-800'
                                 }>
                                   {source.status === 'active' ? (
-                                    <><CheckCircle className="w-3 h-3 mr-1 inline" />激活</>
+                                    <CheckCircle className="w-3 h-3 inline" />
                                   ) : (
-                                    <><XCircle className="w-3 h-3 mr-1 inline" />未激活</>
+                                    <XCircle className="w-3 h-3 inline" />
                                   )}
-                                </Badge>
-                                <Badge variant="secondary" className="text-xs">
-                                  {source.category}
                                 </Badge>
                               </div>
                               <p className="text-sm text-gray-600 mb-3">{source.description}</p>
@@ -1363,14 +1493,14 @@ export function AdminDashboard() {
         </AlertDialog>
 
         {/* 全局 Toast 提示 - 放在最外层以确保显示在所有层级之上 */}
-        {showToast && (
+        {/* {showToast && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
             <div className="bg-red-500 text-white px-6 py-3 rounded-lg shadow-xl text-base font-medium animate-in fade-in zoom-in-95 flex items-center justify-center pointer-events-auto">
               <XCircle className="w-5 h-5 mr-2" />
               {toastMessage || '必填项没填'}
             </div>
           </div>
-        )}
+        )} */}
       </div>
     </div>
   );

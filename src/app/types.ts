@@ -37,7 +37,7 @@ export interface CaseItem {
   };
   creatorId?: string; // 创建者ID（教师）
   creatorName?: string; // 创建者姓名
-  status: 'draft' | 'pending' | 'approved'; // 草稿、待审核、已批准
+  status: 'draft' | 'pending' | 'approved' | 'rejected'; // 草稿、待审核、已批准、已拒绝
   createdAt: Date;
   approvedAt?: Date;
 }

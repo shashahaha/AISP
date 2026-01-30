@@ -5,8 +5,9 @@ from sqlalchemy import select
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
-from app.models.database import Case
+from app.models.database import Case, User
 from app.db.session import get_async_db
+from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/api/cases", tags=["病例管理"])
 
@@ -24,6 +25,7 @@ class CaseCreate(BaseModel):
     standard_diagnosis: str
     differential_diagnosis: Optional[List[str]] = None
     key_questions: Optional[List[str]] = None
+    status: str = "pending"
 
 
 class CaseUpdate(BaseModel):
@@ -39,6 +41,7 @@ class CaseUpdate(BaseModel):
     differential_diagnosis: Optional[List[str]] = None
     key_questions: Optional[List[str]] = None
     is_active: Optional[int] = None
+    status: Optional[str] = None
 
 
 class CaseResponse(BaseModel):
@@ -56,6 +59,8 @@ class CaseResponse(BaseModel):
     differential_diagnosis: Optional[List[str]] = None
     key_questions: Optional[List[str]] = None
     is_active: int
+    status: str
+    created_by: Optional[int] = None
 
     # 不返回created_at，避免datetime序列化问题
 
@@ -64,6 +69,8 @@ class CaseResponse(BaseModel):
 async def list_cases(
     category: Optional[str] = Query(None, description="按科室筛选"),
     difficulty: Optional[str] = Query(None, description="按难度筛选"),
+    status: Optional[str] = Query(None, description="按状态筛选"),
+    created_by: Optional[int] = Query(None, description="按创建者筛选"),
     is_active: Optional[bool] = Query(True, description="是否只显示激活病例"),
     db: AsyncSession = Depends(get_async_db)
 ):
@@ -78,6 +85,12 @@ async def list_cases(
 
     if difficulty:
         query = query.where(Case.difficulty == difficulty)
+
+    if status:
+        query = query.where(Case.status == status)
+
+    if created_by:
+        query = query.where(Case.created_by == created_by)
 
     query = query.order_by(Case.created_at.desc())
 
@@ -110,7 +123,8 @@ async def get_case(
 @router.post("", response_model=CaseResponse, status_code=status.HTTP_201_CREATED)
 async def create_case(
     case_data: CaseCreate,
-    db: AsyncSession = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
 ):
     """创建新病例（仅教师/管理员）"""
     # 检查case_id是否已存在
@@ -135,6 +149,8 @@ async def create_case(
         standard_diagnosis=case_data.standard_diagnosis,
         differential_diagnosis=case_data.differential_diagnosis,
         key_questions=case_data.key_questions,
+        status=case_data.status,
+        created_by=current_user.id,
         is_active=1
     )
 

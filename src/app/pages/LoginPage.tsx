@@ -6,7 +6,6 @@ import { Button } from '@/app/components/ui/button';
 import { Label } from '@/app/components/ui/label';
 import { useAuthStore } from '@/app/stores';
 import { authAPI } from '@/app/services/api';
-import { toastUtils } from '@/app/lib/toast';
 
 export function LoginPage() {
   const [username, setUsername] = useState('');
@@ -37,7 +36,6 @@ export function LoginPage() {
       const { access_token, user } = response;
 
       setAuth(user, access_token);
-      toastUtils.success(`欢迎回来，${user.username}！`);
 
       // 根据角色跳转
       const userRole = user.role.toLowerCase();
@@ -58,7 +56,6 @@ export function LoginPage() {
       const detail = err.response?.data?.detail;
       const errorMsg = formatErrorMessage(detail) || err.message || '登录失败，请检查用户名和密码';
       setError(errorMsg);
-      toastUtils.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -83,7 +80,6 @@ export function LoginPage() {
       const { access_token, user } = response;
 
       setAuth(user, access_token);
-      toastUtils.success(`欢迎回来，${user.username}！`);
 
       const userRole = user.role.toLowerCase();
       switch (userRole) {
@@ -103,7 +99,6 @@ export function LoginPage() {
       const detail = err.response?.data?.detail;
       const errorMsg = formatErrorMessage(detail) || err.message || '快速登录失败，请先创建测试用户';
       setError(errorMsg);
-      toastUtils.error(errorMsg);
     } finally {
       setLoading(false);
     }

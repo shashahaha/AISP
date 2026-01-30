@@ -34,12 +34,12 @@ from sqlalchemy.orm import Session
 
 def create_database_if_not_exists():
     """创建数据库（如果不存在）"""
+    from sqlalchemy import text
+    from app.config import settings
+
     if "sqlite" in settings.DATABASE_URL_SYNC:
         print("[OK] SQLite模式，跳过数据库创建步骤")
         return
-
-    from sqlalchemy import text
-    from app.config import settings
 
     # 如果是SQLite，跳过创建数据库步骤
     if "sqlite" in settings.DATABASE_URL:

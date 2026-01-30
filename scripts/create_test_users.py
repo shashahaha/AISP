@@ -23,24 +23,24 @@ async def create_users():
         
         users_data = [
             {
-                "username": "student1",
-                "email": "student1@example.com",
+                "username": "student",
+                "email": "student@example.com",
                 "role": "STUDENT",
-                "password": "password123",
+                "password": "123456",
                 "full_name": "测试学生"
             },
             {
-                "username": "teacher1", 
-                "email": "teacher1@example.com",
+                "username": "teacher", 
+                "email": "teacher@example.com",
                 "role": "TEACHER",
-                "password": "password123",
+                "password": "123456",
                 "full_name": "测试教师"
             },
             {
                 "username": "admin",
                 "email": "admin@example.com",
                 "role": "ADMIN",
-                "password": "admin123",
+                "password": "123456",
                 "full_name": "系统管理员"
             }
         ]

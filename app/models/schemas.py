@@ -10,6 +10,9 @@ class UserBase(BaseModel):
     email: Optional[str] = None
     full_name: Optional[str] = None
     role: UserRole = UserRole.STUDENT
+    department: Optional[str] = None
+    student_id: Optional[str] = None
+    teacher_id: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -19,6 +22,9 @@ class UserCreate(UserBase):
 class UserResponse(UserBase):
     id: int
     is_active: bool
+    total_sessions: int = 0
+    avg_score: float = 0.0
+    completed_cases: int = 0
     created_at: datetime
 
     class Config:
