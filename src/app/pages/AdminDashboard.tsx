@@ -1,10 +1,6 @@
-<<<<<<< HEAD
 import { useState, useEffect } from 'react';
-=======
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/app/stores';
->>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -123,11 +119,8 @@ export function AdminDashboard() {
   const [sourceName, setSourceName] = useState('');
   const [sourceType, setSourceType] = useState<'internal' | 'external'>('internal');
   const [sourceCategory, setSourceCategory] = useState('');
-<<<<<<< HEAD
   const [sourceDescription, setSourceDescription] = useState('');
   const [sourceUrl, setSourceUrl] = useState('');
-=======
->>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const [sourceStatus, setSourceStatus] = useState<'active' | 'inactive'>('active');
   const [viewingSource, setViewingSource] = useState<KnowledgeSource | null>(null);
   
@@ -447,20 +440,7 @@ export function AdminDashboard() {
     setShowSourceDialog(true);
   };
 
-<<<<<<< HEAD
-=======
-  const handleEditSource = (source: KnowledgeSource) => {
-    setEditingSource(source);
-    setSourceName(source.name);
-    setSourceType(source.type);
-    setSourceUrl(source.url || '');
-    setSourceDescription(source.description);
-    setSourceCategory(source.category);
-    setSourceStatus(source.status);
-    setShowSourceDialog(true);
-  };
 
->>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const handleDeleteSource = (sourceId: string) => {
     setDeleteTarget({ type: 'source', id: sourceId });
     setShowDeleteDialog(true);

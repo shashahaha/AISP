@@ -59,12 +59,6 @@ import {
   AudioWaveform,
 } from "lucide-react";
 
-<<<<<<< HEAD
-import { useAuthStore } from "@/app/stores";
-
-export function StudentDashboard() {
-  const { user, logout } = useAuthStore();
-=======
 export function StudentDashboard() {
   const { user, clearAuth } = useAuthStore();
   const navigate = useNavigate();
@@ -73,8 +67,6 @@ export function StudentDashboard() {
     clearAuth();
     navigate("/login");
   };
-
->>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   const [selectedCase, setSelectedCase] =
     useState<CaseItem | null>(null);
   

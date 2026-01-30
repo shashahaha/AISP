@@ -11,11 +11,7 @@ const getBaseURL = () => {
 
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
-<<<<<<< HEAD
   baseURL: getBaseURL(),
-=======
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
->>>>>>> 4031e0967dab2e0cc0d09f7d98bcb3268d5189a5
   headers: {
     'Content-Type': 'application/json',
   },
