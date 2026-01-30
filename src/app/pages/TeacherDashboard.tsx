@@ -24,12 +24,10 @@ import { mockCases, mockCourseTasks, mockUsers, mockEvaluations, mockLearningSta
 import { LogOut, BookOpen, BarChart3, User as UserIcon, Plus, TrendingUp, Clock, Award, FileText, Pencil, Trash2, Send } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-interface TeacherDashboardProps {
-  user: User;
-  onLogout: () => void;
-}
+import { useAuthStore } from '@/app/stores';
 
-export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
+export function TeacherDashboard() {
+  const { user, logout: onLogout } = useAuthStore();
   const [tasks, setTasks] = useState<CourseTask[]>(mockCourseTasks);
   const [cases, setCases] = useState<CaseItem[]>(mockCases);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -41,6 +39,8 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   const [editingTask, setEditingTask] = useState<CourseTask | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [deleteCaseId, setDeleteCaseId] = useState<string | null>(null);
+
+  if (!user) return null;
 
   // 病例管理相关状态
   const [showCaseDialog, setShowCaseDialog] = useState(false);
@@ -59,7 +59,7 @@ export function TeacherDashboard({ user, onLogout }: TeacherDashboardProps) {
   const [aispPersonality, setAispPersonality] = useState('');
   const [aispAvatar, setAispAvatar] = useState('👤');
 
-  const students = mockUsers.filter(u => u.role === 'student');
+  const students = mockUsers.filter(u => u.role.toLowerCase() === 'student');
   const avatarOptions = ['👨', '👩', '👴', '👵', '👶', '👧', '👦', '🧑', '🧒'];
 
   const [showToast, setShowToast] = useState(false);

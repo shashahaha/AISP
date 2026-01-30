@@ -16,6 +16,17 @@ export function LoginPage() {
   const navigate = useNavigate();
   const setAuth = useAuthStore((state) => state.setAuth);
 
+  const formatErrorMessage = (detail: any): string => {
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+      return detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+    }
+    if (typeof detail === 'object' && detail !== null) {
+      return detail.msg || String(detail);
+    }
+    return '登录失败，请检查网络或联系管理员';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -29,7 +40,8 @@ export function LoginPage() {
       toastUtils.success(`欢迎回来，${user.username}！`);
 
       // 根据角色跳转
-      switch (user.role) {
+      const userRole = user.role.toLowerCase();
+      switch (userRole) {
         case 'student':
           navigate('/student');
           break;
@@ -43,7 +55,8 @@ export function LoginPage() {
           navigate('/student');
       }
     } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || '登录失败，请检查用户名和密码';
+      const detail = err.response?.data?.detail;
+      const errorMsg = formatErrorMessage(detail) || err.message || '登录失败，请检查用户名和密码';
       setError(errorMsg);
       toastUtils.error(errorMsg);
     } finally {
@@ -70,8 +83,10 @@ export function LoginPage() {
       const { access_token, user } = response;
 
       setAuth(user, access_token);
+      toastUtils.success(`欢迎回来，${user.username}！`);
 
-      switch (user.role) {
+      const userRole = user.role.toLowerCase();
+      switch (userRole) {
         case 'student':
           navigate('/student');
           break;
@@ -85,7 +100,10 @@ export function LoginPage() {
           navigate('/student');
       }
     } catch (err: any) {
-      setError('快速登录失败，请先创建测试用户');
+      const detail = err.response?.data?.detail;
+      const errorMsg = formatErrorMessage(detail) || err.message || '快速登录失败，请先创建测试用户';
+      setError(errorMsg);
+      toastUtils.error(errorMsg);
     } finally {
       setLoading(false);
     }

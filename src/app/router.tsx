@@ -13,7 +13,7 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
     return <Navigate to="/login" replace />;
   }
 
-  if (user && !allowedRoles.includes(user.role)) {
+  if (user && !allowedRoles.includes(user.role.toLowerCase())) {
     return <Navigate to="/unauthorized" replace />;
   }
 

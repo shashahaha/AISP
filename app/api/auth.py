@@ -7,7 +7,7 @@ from typing import Dict, Optional
 from datetime import timedelta
 
 from app.models.database import User
-from app.models.schemas import UserResponse
+from app.models.schemas import UserResponse, UserBase
 from app.db.session import get_async_db
 from app.utils.auth import (
     verify_password,
@@ -16,6 +16,7 @@ from app.utils.auth import (
     decode_token
 )
 from app.config import settings
+from typing import List
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
 security = HTTPBearer()
@@ -154,3 +155,71 @@ async def get_current_user_info(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     return user
+
+
+@router.get("/users", response_model=List[UserResponse])
+async def list_users(
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """获取所有用户列表（仅管理员）"""
+    if current_user.role.upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="没有权限访问用户列表")
+    
+    result = await db.execute(select(User).order_by(User.id))
+    return result.scalars().all()
+
+
+@router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(
+    user_id: int,
+    user_data: Dict,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """更新用户信息（仅管理员）"""
+    if current_user.role.upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="没有权限修改用户信息")
+    
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    if "username" in user_data:
+        user.username = user_data["username"]
+    if "email" in user_data:
+        user.email = user_data["email"]
+    if "role" in user_data:
+        user.role = user_data["role"]
+    if "full_name" in user_data:
+        user.full_name = user_data["full_name"]
+    if "password" in user_data and user_data["password"]:
+        user.hashed_password = get_password_hash(user_data["password"])
+    
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(
+    user_id: int,
+    db: AsyncSession = Depends(get_async_db),
+    current_user: User = Depends(get_current_user)
+):
+    """删除用户（仅管理员）"""
+    if current_user.role.upper() != "ADMIN":
+        raise HTTPException(status_code=403, detail="没有权限删除用户")
+    
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="不能删除当前登录的管理员账号")
+        
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    
+    await db.delete(user)
+    await db.commit()
+    return {"message": "用户已成功删除"}

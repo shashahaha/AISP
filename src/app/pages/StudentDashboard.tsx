@@ -40,7 +40,7 @@ import {
   mockEvaluations,
   mockCourseTasks,
 } from "@/app/mockData";
-import { AISPDialog } from "./AISPDialog";
+import { AISPDialog } from "@/app/components/AISPDialog";
 import {
   LogOut,
   Award,
@@ -57,17 +57,15 @@ import {
   AudioWaveform,
 } from "lucide-react";
 
-interface StudentDashboardProps {
-  user: User;
-  onLogout: () => void;
-}
+import { useAuthStore } from "@/app/stores";
 
-export function StudentDashboard({
-  user,
-  onLogout,
-}: StudentDashboardProps) {
+export function StudentDashboard() {
+  const { user, logout } = useAuthStore();
   const [selectedCase, setSelectedCase] =
     useState<CaseItem | null>(null);
+  
+  if (!user) return null;
+
   const [evaluations, setEvaluations] = useState<
     EvaluationResult[]
   >(mockEvaluations.filter((e) => e.studentId === user.id));
@@ -265,7 +263,7 @@ export function StudentDashboard({
           </div>
           <Button
             variant="ghost"
-            onClick={onLogout}
+            onClick={logout}
             className="gap-2"
           >
             <LogOut className="w-4 h-4" />

@@ -11,6 +11,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from dataclasses import dataclass
 import re
+from app.services.baichuan_service import get_baichuan_service
 
 
 @dataclass
@@ -93,7 +94,7 @@ class ScoringEngine:
         self.weights = weights or self.DEFAULT_WEIGHTS.copy()
         self.standards = standards or self.DEFAULT_STANDARDS.copy()
 
-    def score_session(
+    async def score_session(
         self,
         conversation_history: List[Dict[str, Any]],
         student_diagnosis: str,
@@ -110,46 +111,95 @@ class ScoringEngine:
         Returns:
             ScoringResult对象
         """
-        # 1. 问诊评分
+        # 1. 问诊评分 (规则基础)
         inquiry_result = self._score_inquiry(conversation_history, case_data)
 
-        # 2. 诊断评分
+        # 2. 诊断评分 (规则基础)
         diagnosis_result = self._score_diagnosis(
             conversation_history,
             student_diagnosis,
             case_data
         )
 
-        # 3. 沟通评分
+        # 3. 沟通评分 (规则基础)
         communication_result = self._score_communication(conversation_history)
 
-        # 4. 计算综合评分
+        # 4. 调用百川大模型进行智能评估
+        baichuan_service = get_baichuan_service()
+        llm_result = await baichuan_service.evaluate_student_performance(
+            case_data, conversation_history, student_diagnosis
+        )
+
+        # 5. 融合分数 (LLM 修正)
+        # 问诊逻辑: 规则(20分) -> LLM(25分) * 0.8
+        if llm_result["scores"].get("inquiry_logic", 0) > 0:
+            inquiry_result["logic_score"] = llm_result["scores"]["inquiry_logic"] * 0.8
+            # 重新计算问诊总分
+            inquiry_result["total"] = (
+                inquiry_result["total"] - self.standards["logic_score"] # 减去原满分/得分? 应该是重新加和
+                # 由于 _score_inquiry 返回的是各部分得分，我们可以重新计算 total
+            )
+            inquiry_result["total"] = (
+                inquiry_result["key_question_score"] if "key_question_score" in inquiry_result else (inquiry_result["coverage_rate"] * self.standards["key_question_score"]) +
+                inquiry_result["symptom_score"] +
+                inquiry_result["logic_score"] +
+                inquiry_result["etiquette_score"]
+            )
+
+        # 诊断推理: 规则(10分) -> LLM(25分) * 0.4
+        if llm_result["scores"].get("diagnosis_reasoning", 0) > 0:
+            diagnosis_result["reasoning_score"] = llm_result["scores"]["diagnosis_reasoning"] * 0.4
+            diagnosis_result["total"] = min(
+                diagnosis_result["accuracy_score"] if "accuracy_score" in diagnosis_result else (35 if diagnosis_result["accuracy"]=="correct" else (15 if diagnosis_result["accuracy"]=="partial" else 0)) + 
+                diagnosis_result["reasoning_score"], 
+                35
+            )
+
+        # 沟通能力: 规则(25分) -> LLM(25分)
+        # 这里比较复杂，因为沟通分由 turn, polite, empathy 组成
+        # 我们可以用 LLM 分数作为 communication_total，并反推或保留细项
+        if llm_result["scores"].get("communication", 0) > 0:
+            communication_result["total"] = min(llm_result["scores"]["communication"], 25)
+            # 细项可以保留规则计算的值，仅总分使用 LLM
+
+        # 6. 计算综合评分
         final_score = (
             inquiry_result["total"] * self.weights["inquiry"] +
             diagnosis_result["total"] * self.weights["diagnosis"] +
             communication_result["total"] * self.weights["communication"]
         )
 
-        # 5. 计算等级
+        # 7. 计算等级
         grade = self._calculate_grade(final_score)
         passed = final_score >= 60
 
-        # 6. 生成建议
+        # 8. 生成建议 (融合 LLM 建议)
         suggestions = self._generate_suggestions(
             inquiry_result,
             diagnosis_result,
             communication_result,
             case_data
         )
+        if llm_result.get("suggestions"):
+            suggestions.extend(llm_result["suggestions"])
+            # 去重并限制数量
+            suggestions = list(set(suggestions))[:5]
 
-        # 7. 生成AI评语
-        ai_comments = self._generate_ai_comments(
-            final_score,
-            grade,
-            inquiry_result,
-            diagnosis_result,
-            communication_result
-        )
+        # 9. 生成AI评语 (优先使用 LLM 评语)
+        ai_comments = llm_result.get("overall_comment")
+        if not ai_comments:
+            ai_comments = self._generate_ai_comments(
+                final_score,
+                grade,
+                inquiry_result,
+                diagnosis_result,
+                communication_result
+            )
+        else:
+            # 追加详细点评
+            comments_detail = llm_result.get("comments", {})
+            detail_str = "\n".join([f"{k}: {v}" for k, v in comments_detail.items()])
+            ai_comments += "\n\n详细评价：\n" + detail_str
 
         return ScoringResult(
             # 问诊评分

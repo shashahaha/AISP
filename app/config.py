@@ -10,6 +10,11 @@ class Settings(BaseSettings):
     ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/coding/paas/v4"
     ZHIPU_MODEL: str = "glm-4.7"
 
+    # 百川大模型 API
+    BAICHUAN_API_KEY: str = ""
+    BAICHUAN_BASE_URL: str = "https://api.baichuan-ai.com/v1"
+    BAICHUAN_MODEL: str = "Baichuan4"
+
     # DeepSeek API（备用）
     # DEEPSEEK_API_KEY: str = ""
     # DEEPSEEK_BASE_URL: str = "https://api.deepseek.com/v1"

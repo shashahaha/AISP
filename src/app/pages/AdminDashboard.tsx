@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
 import { Button } from '@/app/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/app/components/ui/tabs';
@@ -10,7 +10,10 @@ import { Badge } from '@/app/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/app/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/app/components/ui/table';
 import { User, CaseItem, ScoringCriteria, KnowledgeSource, KnowledgeNode } from '@/app/types';
-import { mockUsers, mockCases, mockScoringCriteria, mockKnowledgeSources, mockKnowledgeNodes } from '@/app/mockData';
+import { mockCases, mockScoringCriteria, mockKnowledgeSources, mockKnowledgeNodes } from '@/app/mockData';
+import { authAPI } from '@/app/services/api';
+import { toastUtils } from '@/app/lib/toast';
+import { useAuthStore } from '@/app/stores';
 import { 
   LogOut, 
   Users, 
@@ -42,13 +45,28 @@ import {
   AlertDialogTitle,
 } from "@/app/components/ui/alert-dialog";
 
-interface AdminDashboardProps {
-  user: User;
-  onLogout: () => void;
-}
+export function AdminDashboard() {
+  const { user, logout } = useAuthStore();
+  const [users, setUsers] = useState<any[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
-export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  if (!user) return null;
+
+  const fetchUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const data = await authAPI.listUsers();
+      setUsers(data);
+    } catch (err) {
+      toastUtils.error('获取用户列表失败');
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
   const [cases, setCases] = useState<CaseItem[]>(mockCases);
   const [criteria, setCriteria] = useState<ScoringCriteria[]>(mockScoringCriteria);
   const [knowledgeSources, setKnowledgeSources] = useState<KnowledgeSource[]>(mockKnowledgeSources);
@@ -114,49 +132,47 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setTimeout(() => setShowToast(false), 3000);
   };
 
-  const handleSaveUser = () => {
-    if (!userName || !userUsername || !userPassword || !userEmail) {
+  const handleSaveUser = async () => {
+    if (!userUsername || (!editingUser && !userPassword) || !userEmail) {
       showToastMessage('必填项没填');
       return;
     }
 
-    if (editingUser) {
-      setUsers(users.map(u => u.id === editingUser.id ? {
-        ...u,
-        username: userUsername,
-        password: userPassword,
-        role: userRole,
-        name: userName,
-        email: userEmail,
-        department: userDepartment,
-        studentId: userRole === 'student' ? (u.studentId || `S${Date.now()}`) : undefined,
-        teacherId: userRole === 'teacher' ? (u.teacherId || `T${Date.now()}`) : undefined,
-      } : u));
-    } else {
-      const newUser: User = {
-        id: `user${users.length + 1}`,
-        username: userUsername,
-        password: userPassword,
-        role: userRole,
-        name: userName,
-        email: userEmail,
-        department: userDepartment,
-        studentId: userRole === 'student' ? `S${Date.now()}` : undefined,
-        teacherId: userRole === 'teacher' ? `T${Date.now()}` : undefined,
-      };
-      setUsers([...users, newUser]);
+    try {
+      if (editingUser) {
+        await authAPI.updateUser(Number(editingUser.id), {
+          username: userUsername,
+          full_name: userName,
+          email: userEmail,
+          role: userRole,
+          password: userPassword || undefined,
+        });
+        toastUtils.success('用户更新成功');
+      } else {
+        await authAPI.createUser({
+          username: userUsername,
+          password: userPassword,
+          email: userEmail,
+          role: userRole,
+        });
+        toastUtils.success('用户创建成功');
+      }
+      fetchUsers();
+      resetUserForm();
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || '保存失败';
+      toastUtils.error(typeof msg === 'string' ? msg : JSON.stringify(msg));
     }
-    resetUserForm();
   };
 
-  const handleEditUser = (user: User) => {
+  const handleEditUser = (user: any) => {
     setEditingUser(user);
-    setUserName(user.name);
+    setUserName(user.full_name || '');
     setUserUsername(user.username);
-    setUserPassword(user.password);
-    setUserEmail(user.email);
+    setUserPassword(''); // 不回显密码
+    setUserEmail(user.email || '');
     setUserRole(user.role);
-    setUserDepartment(user.department || '');
+    setUserDepartment(''); // 后端暂未存储 department
     setShowUserDialog(true);
   };
 
@@ -422,20 +438,26 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
     setShowDeleteDialog(true);
   };
 
-  const confirmDelete = (e: React.MouseEvent) => {
+  const confirmDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
     if (!deleteTarget) return;
 
-    switch (deleteTarget.type) {
-      case 'user':
-        setUsers(users.filter(u => u.id !== deleteTarget.id));
-        break;
-      case 'case':
-        setCases(cases.filter(c => c.id !== deleteTarget.id));
-        break;
-      case 'source':
-        setKnowledgeSources(knowledgeSources.filter(s => s.id !== deleteTarget.id));
-        break;
+    try {
+      switch (deleteTarget.type) {
+        case 'user':
+          await authAPI.deleteUser(Number(deleteTarget.id));
+          toastUtils.success('用户已删除');
+          fetchUsers();
+          break;
+        case 'case':
+          setCases(cases.filter(c => c.id !== deleteTarget.id));
+          break;
+        case 'source':
+          setKnowledgeSources(knowledgeSources.filter(s => s.id !== deleteTarget.id));
+          break;
+      }
+    } catch (err) {
+      toastUtils.error('删除失败');
     }
     
     setDeleteTarget(null);
@@ -482,7 +504,7 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
             <h1 className="text-xl font-semibold">AISP 教学系统 - 超级管理员</h1>
             <p className="text-sm text-gray-500">欢迎，{user.name}</p>
           </div>
-          <Button variant="ghost" onClick={onLogout}>
+          <Button variant="ghost" onClick={logout}>
             <LogOut className="w-4 h-4 mr-2" />
             退出登录
           </Button>
@@ -609,45 +631,49 @@ export function AdminDashboard({ user, onLogout }: AdminDashboardProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {[...users]
-                      .reverse() // 首先反转，实现新添加的用户在前面
-                      .sort((a, b) => {
-                        // 排序逻辑：管理员排在最后
-                        if (a.role === 'admin' && b.role !== 'admin') return 1;
-                        if (a.role !== 'admin' && b.role === 'admin') return -1;
-                        return 0; // 同类角色保持原有顺序（即反转后的时间倒序）
-                      })
-                      .map((user) => (
-                      <TableRow key={user.id}>
-                        <TableCell>{user.name}</TableCell>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>{user.email}</TableCell>
+                    {loadingUsers ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-10">
+                          加载中...
+                        </TableCell>
+                      </TableRow>
+                    ) : users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-10">
+                          暂无用户数据
+                        </TableCell>
+                      </TableRow>
+                    ) : users.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell>{u.full_name || '-'}</TableCell>
+                        <TableCell>{u.username}</TableCell>
+                        <TableCell>{u.email || '-'}</TableCell>
                         <TableCell>
                           <Badge
                             className={
-                              user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                              user.role === 'teacher' ? 'bg-blue-100 text-blue-800' :
+                              u.role.toLowerCase() === 'admin' ? 'bg-purple-100 text-purple-800' :
+                              u.role.toLowerCase() === 'teacher' ? 'bg-blue-100 text-blue-800' :
                               'bg-green-100 text-green-800'
                             }
                           >
-                            {user.role === 'admin' ? '管理员' : user.role === 'teacher' ? '教师' : '学生'}
+                            {u.role.toLowerCase() === 'admin' ? '管理员' : u.role.toLowerCase() === 'teacher' ? '教师' : '学生'}
                           </Badge>
                         </TableCell>
-                        <TableCell>{user.department || '-'}</TableCell>
+                        <TableCell>{u.department || '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-2">
                             <Button 
                               variant="ghost" 
                               size="sm"
-                              onClick={() => handleEditUser(user)}
+                              onClick={() => handleEditUser(u)}
                             >
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            {user.role !== 'admin' && (
+                            {u.username !== user.username && (
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDeleteUser(user.id)}
+                                onClick={() => handleDeleteUser(u.id)}
                               >
                                 <Trash2 className="w-4 h-4 text-red-500" />
                               </Button>

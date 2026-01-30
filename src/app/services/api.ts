@@ -2,9 +2,16 @@
 import axios, { AxiosInstance } from 'axios';
 import { useAuthStore } from '../stores/authStore';
 
+// 获取当前主机名，用于跨设备访问
+const getBaseURL = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  const hostname = window.location.hostname;
+  return `http://${hostname}:8000`;
+};
+
 // 创建 axios 实例
 const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://10.21.1.5:8000',
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json',
   },
@@ -109,10 +116,14 @@ export interface SessionScoreResponse {
 // 认证接口
 export const authAPI = {
   login: async (username: string, password: string) => {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-    const response = await apiClient.post('/api/auth/login', formData);
+    const params = new URLSearchParams();
+    params.append('username', username);
+    params.append('password', password);
+    const response = await apiClient.post('/api/auth/login', params, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    });
     return response.data;
   },
 
@@ -127,6 +138,33 @@ export const authAPI = {
     const response = await apiClient.get('/api/auth/me', {
       params: { token }
     });
+    return response.data;
+  },
+
+  listUsers: async () => {
+    const response = await apiClient.get('/api/auth/users');
+    return response.data;
+  },
+
+  createUser: async (userData: any) => {
+    const response = await apiClient.post('/api/auth/register', null, {
+      params: {
+        username: userData.username,
+        password: userData.password,
+        email: userData.email,
+        role: userData.role
+      }
+    });
+    return response.data;
+  },
+
+  updateUser: async (userId: number, userData: any) => {
+    const response = await apiClient.put(`/api/auth/users/${userId}`, userData);
+    return response.data;
+  },
+
+  deleteUser: async (userId: number) => {
+    const response = await apiClient.delete(`/api/auth/users/${userId}`);
     return response.data;
   },
 };

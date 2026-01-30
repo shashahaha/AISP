@@ -7,9 +7,9 @@ import enum
 
 class UserRole(str, enum.Enum):
     """用户角色"""
-    STUDENT = "student"
-    TEACHER = "teacher"
-    ADMIN = "admin"
+    STUDENT = "STUDENT"
+    TEACHER = "TEACHER"
+    ADMIN = "ADMIN"
 
 
 class SessionStatus(str, enum.Enum):

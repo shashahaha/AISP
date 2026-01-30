@@ -3,9 +3,9 @@ from enum import Enum
 
 class UserRole(str, Enum):
     """用户角色枚举"""
-    STUDENT = "student"
-    TEACHER = "teacher"
-    ADMIN = "admin"
+    STUDENT = "STUDENT"
+    TEACHER = "TEACHER"
+    ADMIN = "ADMIN"
 
 
 class SessionStatus(str, Enum):

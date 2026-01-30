@@ -44,7 +44,7 @@ class ScoringService:
             SessionScore对象
         """
         # 使用评分引擎计算评分
-        result = self.engine.score_session(
+        result = await self.engine.score_session(
             conversation_history=conversation_history,
             student_diagnosis=student_diagnosis,
             case_data=case_data
